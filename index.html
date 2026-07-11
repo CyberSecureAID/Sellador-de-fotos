@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sellador de fotos — fecha real (EXIF)</title>
+<!-- Roboto: es la fuente de la foto de referencia (la que usan las apps
+     de sellado en Android). Si no hay internet, cae a Helvetica/Arial,
+     que son casi idénticas en este tamaño. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* ── Cuarto oscuro: carbón cálido + ámbar de luz de seguridad ── */
+  :root{
+    --bg:#14120F; --panel:#1C1915; --panel-2:#232019;
+    --line:#332E27; --line-soft:#282420;
+    --tx:#E9E3D7; --dim:#9C9387; --faint:#6B645B;
+    --amber:#E5A33D; --amber-dim:rgba(229,163,61,.16);
+    --ok:#6FBF73; --warn:#E5734B;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg);color:var(--tx);font-family:var(--sans);
+    font-size:14px;line-height:1.5;min-height:100vh;
+  }
+  h1{font-size:15px;font-weight:600;letter-spacing:-.01em}
+  h2{
+    font-family:var(--mono);font-size:10px;font-weight:500;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--faint);
+    margin-bottom:12px;
+  }
+
+  /* ── Estructura ── */
+  header{
+    display:flex;align-items:center;gap:16px;
+    padding:14px 20px;border-bottom:1px solid var(--line);
+    background:var(--panel);position:sticky;top:0;z-index:10;
+  }
+  .logo{
+    width:26px;height:26px;border-radius:5px;flex-shrink:0;
+    background:var(--amber-dim);border:1px solid var(--amber);
+    display:grid;place-items:center;color:var(--amber);
+    font-family:var(--mono);font-size:12px;
+  }
+  .spacer{flex:1}
+  .count{font-family:var(--mono);font-size:12px;color:var(--dim)}
+
+  main{
+    display:grid;grid-template-columns:270px 1fr 330px;
+    gap:1px;background:var(--line-soft);
+    height:calc(100vh - 55px);
+  }
+  .col{background:var(--bg);overflow-y:auto;padding:18px}
+  @media(max-width:1100px){
+    main{grid-template-columns:1fr;height:auto}
+    .col{max-height:none}
+  }
+
+  /* ── Botones ── */
+  button{
+    font-family:inherit;font-size:13px;cursor:pointer;
+    border-radius:6px;border:1px solid var(--line);
+    background:var(--panel-2);color:var(--tx);
+    padding:8px 14px;transition:border-color .15s,background .15s;
+  }
+  button:hover:not(:disabled){border-color:var(--faint);background:#2A2620}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+  .btn-go{
+    background:var(--amber);color:#1A1408;border-color:var(--amber);
+    font-weight:600;
+  }
+  .btn-go:hover:not(:disabled){background:#F0B252;border-color:#F0B252}
+  .btn-sm{padding:5px 10px;font-size:12px}
+
+  /* ── Zona de carga ── */
+  .drop{
+    border:1.5px dashed var(--line);border-radius:10px;
+    padding:26px 16px;text-align:center;color:var(--dim);
+    cursor:pointer;transition:.15s;
+  }
+  .drop:hover,.drop.over{border-color:var(--amber);background:var(--amber-dim);color:var(--tx)}
+  .drop b{display:block;color:var(--tx);margin-bottom:4px;font-weight:600}
+  .drop small{font-size:11px;color:var(--faint)}
+
+  /* ── Lista de fotos ── */
+  .list{margin-top:16px;display:flex;flex-direction:column;gap:1px}
+  .item{
+    display:flex;align-items:center;gap:10px;padding:8px;
+    border-radius:6px;cursor:pointer;border:1px solid transparent;
+  }
+  .item:hover{background:var(--panel)}
+  .item.sel{background:var(--panel-2);border-color:var(--amber)}
+  .item img{
+    width:44px;height:44px;object-fit:cover;border-radius:4px;
+    background:var(--panel-2);flex-shrink:0;
+  }
+  /* min-width:0 + overflow:hidden = el texto puede encogerse dentro
+     del recuadro. Sin esto, un nombre largo empuja la caja y se sale. */
+  .item .meta{min-width:0;flex:1;overflow:hidden}
+  /* display:block es imprescindible: los puntos suspensivos NO
+     funcionan en elementos en línea (que es lo que era un <span>). */
+  .item .nm{
+    display:block;font-size:12px;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;color:var(--tx);
+  }
+  .item .dt{
+    display:block;font-family:var(--mono);font-size:10px;
+    color:var(--dim);margin-top:2px;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;
+  }
+  .item .dt.bad{color:var(--warn)}
+  .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+  .del{
+    flex-shrink:0;padding:3px 7px;font-size:14px;line-height:1;
+    background:transparent;border:none;color:var(--faint);
+    border-radius:4px;opacity:0;transition:.12s;
+  }
+  .item:hover .del{opacity:1}
+  .del:hover{background:rgba(229,115,75,.18);color:var(--warn)}
+
+  /* Muestras de color */
+  .swatches{display:flex;gap:6px;flex-wrap:wrap}
+  .sw{
+    width:26px;height:26px;border-radius:5px;cursor:pointer;
+    border:2px solid var(--line);padding:0;
+  }
+  .sw:hover{border-color:var(--faint)}
+  .sw.on{border-color:var(--amber);box-shadow:0 0 0 2px var(--amber-dim)}
+
+  .check{
+    display:flex;align-items:center;gap:8px;cursor:pointer;
+    font-size:12px;color:var(--dim);
+  }
+  .check input{accent-color:var(--amber);width:14px;height:14px;cursor:pointer}
+  .dot.ok{background:var(--ok)}
+  .dot.bad{background:var(--warn)}
+
+  /* ── Lienzo ── */
+  .stage{
+    position:relative;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;
+    height:62vh;min-height:340px;background:var(--panel);
+    border-radius:10px;border:1px solid var(--line);
+    cursor:grab;touch-action:none;
+  }
+  .stage.drag{cursor:grabbing}
+  /* El lienzo se ancla en la esquina (0,0) del escenario.
+     ANTES heredaba el centrado de flexbox Y ADEMÁS recibía el
+     translate del paneo: se posicionaba dos veces y aparecía fuera
+     del marco. Con position:absolute, el transform es la única
+     fuente de posición y fitToStage() puede centrarlo con exactitud. */
+  .stage canvas{
+    position:absolute;top:0;left:0;
+    transform-origin:0 0;border-radius:2px;display:block;
+  }
+  /* Controles de zoom flotantes */
+  .zoombar{
+    position:absolute;right:10px;bottom:10px;z-index:3;
+    display:flex;align-items:center;gap:4px;
+    background:rgba(20,18,15,.9);border:1px solid var(--line);
+    border-radius:8px;padding:4px;backdrop-filter:blur(6px);
+  }
+  .zoombar button{
+    padding:4px 9px;font-size:13px;font-family:var(--mono);
+    background:transparent;border:none;color:var(--tx);
+  }
+  .zoombar button:hover{background:var(--panel-2)}
+  .zoombar .lvl{
+    font-family:var(--mono);font-size:11px;color:var(--dim);
+    min-width:44px;text-align:center;
+  }
+  .hint{
+    position:absolute;left:10px;bottom:10px;z-index:3;
+    font-family:var(--mono);font-size:10px;color:var(--faint);
+    background:rgba(20,18,15,.8);padding:3px 7px;border-radius:5px;
+    pointer-events:none;
+  }
+  .empty{color:var(--faint);text-align:center;font-size:13px}
+
+  /* ── Campos ── */
+  .field{margin-bottom:16px}
+  label{
+    display:block;font-family:var(--mono);font-size:10px;
+    letter-spacing:.1em;text-transform:uppercase;
+    color:var(--faint);margin-bottom:6px;
+  }
+  input[type=text],textarea,select{
+    width:100%;background:var(--panel);color:var(--tx);
+    border:1px solid var(--line);border-radius:6px;
+    padding:9px 11px;font-family:var(--mono);font-size:12px;
+    line-height:1.6;resize:vertical;
+  }
+  input:focus,textarea:focus,select:focus{
+    outline:none;border-color:var(--amber);
+  }
+  textarea{min-height:96px}
+  input[type=range]{width:100%;accent-color:var(--amber)}
+  .row{display:flex;gap:8px;align-items:center}
+  .row .val{font-family:var(--mono);font-size:11px;color:var(--dim);min-width:42px;text-align:right}
+
+  .note{
+    font-size:11px;color:var(--faint);line-height:1.5;margin-top:6px;
+  }
+  .alert{
+    background:rgba(229,115,75,.1);border:1px solid rgba(229,115,75,.35);
+    color:#F0A98D;border-radius:6px;padding:9px 11px;
+    font-size:12px;line-height:1.5;margin-bottom:14px;
+  }
+  .alert b{color:var(--warn)}
+  hr{border:none;border-top:1px solid var(--line);margin:18px 0}
+
+  /* Inspector de metadatos (solo lectura) */
+  details.meta-box{
+    border:1px solid var(--line);border-radius:8px;
+    background:var(--panel);margin-top:4px;
+  }
+  details.meta-box summary{
+    cursor:pointer;padding:9px 11px;list-style:none;
+    font-family:var(--mono);font-size:10px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--dim);
+    display:flex;align-items:center;gap:8px;
+  }
+  details.meta-box summary::-webkit-details-marker{display:none}
+  details.meta-box summary::before{content:'▸';font-size:9px;color:var(--faint)}
+  details.meta-box[open] summary::before{content:'▾'}
+  details.meta-box summary:hover{color:var(--tx)}
+  .meta-body{padding:0 11px 11px;max-height:280px;overflow-y:auto}
+  .meta-sec{
+    font-family:var(--mono);font-size:9px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--amber);
+    margin:10px 0 5px;padding-top:8px;border-top:1px solid var(--line-soft);
+  }
+  .meta-sec:first-child{border-top:none;padding-top:0;margin-top:2px}
+  .meta-row{
+    display:flex;justify-content:space-between;gap:10px;
+    padding:3px 0;font-size:11px;border-bottom:1px solid rgba(51,46,39,.4);
+  }
+  .meta-row:last-child{border-bottom:none}
+  .meta-row .k{color:var(--dim);flex-shrink:0}
+  .meta-row .v{
+    font-family:var(--mono);color:var(--tx);text-align:right;
+    word-break:break-word;
+  }
+  .meta-none{
+    font-size:11px;color:var(--faint);line-height:1.55;padding:4px 0;
+  }
+  .meta-none b{color:var(--warn)}
+
+  .bar{
+    height:3px;background:var(--panel-2);border-radius:2px;
+    overflow:hidden;margin-top:10px;display:none;
+  }
+  .bar.on{display:block}
+  .bar i{display:block;height:100%;background:var(--amber);width:0;transition:width .2s}
+  .status{
+    font-family:var(--mono);font-size:11px;color:var(--dim);
+    margin-top:8px;min-height:16px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">◉</div>
+  <h1>Sellador de fotos</h1>
+  <span class="count" id="hdrCount">Sin fotos</span>
+  <div class="spacer"></div>
+  <button id="btnExport" class="btn-go" disabled>Exportar todas (.zip)</button>
+</header>
+
+<main>
+  <!-- ══ Columna 1: fotos ══ -->
+  <section class="col">
+    <h2>Fotos</h2>
+
+    <div class="drop" id="drop">
+      <b>Arrastra tus fotos aquí</b>
+      <small>o haz clic para elegirlas · JPG con datos EXIF</small>
+    </div>
+    <input type="file" id="file" accept="image/jpeg,image/jpg" multiple hidden>
+
+    <div class="list" id="list"></div>
+  </section>
+
+  <!-- ══ Columna 2: vista previa ══ -->
+  <section class="col">
+    <h2>Vista previa</h2>
+    <div class="stage" id="stage">
+      <div class="empty">Carga fotos para empezar.<br>El sello se dibuja con la fecha real del archivo.</div>
+      <div class="zoombar" id="zoombar" style="display:none">
+        <button id="zOut" title="Alejar">−</button>
+        <span class="lvl" id="zLvl">100%</span>
+        <button id="zIn" title="Acercar">+</button>
+        <button id="zFit" title="Ajustar a la ventana">Ajustar</button>
+        <button id="zStamp" title="Ver el sello al 100%">Sello</button>
+      </div>
+      <div class="hint" id="hint" style="display:none">Rueda = zoom · Arrastrar = mover · Doble clic = ajustar</div>
+    </div>
+    <div class="status" id="status"></div>
+    <div class="bar" id="bar"><i id="barFill"></i></div>
+  </section>
+
+  <!-- ══ Columna 3: sello ══ -->
+  <section class="col">
+    <h2>Sello de esta foto</h2>
+
+    <div id="noSel" class="empty" style="padding:20px 0">Elige una foto de la lista.</div>
+
+    <div id="editor" style="display:none">
+      <div id="warnNoExif" class="alert" style="display:none">
+        <b>Sin fecha EXIF.</b> Este archivo no guarda cuándo se tomó.
+        Puedes usar la fecha de modificación del archivo, pero es menos fiable
+        (cambia al copiar o editar).
+        <div style="margin-top:8px">
+          <button class="btn-sm" id="btnUseMtime">Usar fecha de modificación</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="rename">Nombre al exportar</label>
+        <input type="text" id="rename" spellcheck="false" placeholder="parque, zoológico, tienda…">
+        <p class="note">Se le añade <code>.jpg</code> solo. Si dejas dos fotos con el mismo nombre, se numeran para que ninguna se pise.</p>
+      </div>
+
+      <div class="field">
+        <label for="lines">Líneas del sello</label>
+        <textarea id="lines" spellcheck="false"></textarea>
+        <p class="note">
+          Una línea por renglón. La primera se rellena con la fecha y hora reales
+          del archivo. Edítala si necesitas corregir algo puntual.
+        </p>
+      </div>
+
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <button class="btn-sm" id="btnResetOne">Restaurar fecha EXIF</button>
+        <button class="btn-sm" id="btnApplyExtra">Aplicar pie a todas</button>
+      </div>
+
+      <!-- ═══ INSPECTOR DE METADATOS (solo lectura) ═══
+           Muestra todo lo que el archivo trae dentro. No lo modifica:
+           es una ventana al contenido real de la foto. -->
+      <details class="meta-box" id="metaBox" style="margin-top:14px">
+        <summary>Metadatos del archivo</summary>
+        <div class="meta-body" id="metaBody"></div>
+      </details>
+
+      <hr>
+
+      <h2>Apariencia (todas)</h2>
+
+      <div class="field">
+        <label for="extra">Líneas fijas (pie del sello)</label>
+        <textarea id="extra" spellcheck="false" style="min-height:70px"></textarea>
+        <p class="note">Se añaden bajo la fecha en las fotos nuevas.</p>
+      </div>
+
+      <div class="field">
+        <label for="font">Tipo de letra</label>
+        <select id="font">
+          <option value='Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif' selected>Roboto (como la foto de ejemplo)</option>
+          <option value='system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif'>Sistema (neutra)</option>
+          <option value='Arial, Helvetica, sans-serif'>Arial</option>
+          <option value='"Helvetica Neue", Helvetica, Arial, sans-serif'>Helvetica</option>
+          <option value='Verdana, Geneva, sans-serif'>Verdana</option>
+          <option value='"Trebuchet MS", sans-serif'>Trebuchet</option>
+          <option value='Georgia, "Times New Roman", serif'>Georgia (serif)</option>
+          <option value='"Times New Roman", Times, serif'>Times (serif)</option>
+          <option value='"Courier New", Courier, monospace'>Courier (mono)</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Peso</label>
+        <select id="weight">
+          <option value="400">Normal</option>
+          <option value="500" selected>Medio</option>
+          <option value="700">Negrita</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Color del texto</label>
+        <div class="swatches" id="swatches"></div>
+      </div>
+
+      <div class="field">
+        <label for="size">Tamaño del texto</label>
+        <div class="row">
+          <input type="range" id="size" min="10" max="55" step="1" value="26">
+          <span class="val" id="sizeVal">2.6%</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="pad">Margen</label>
+        <div class="row">
+          <input type="range" id="pad" min="5" max="60" step="1" value="22">
+          <span class="val" id="padVal">2.2%</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="quality">Calidad de exportación</label>
+        <div class="row">
+          <input type="range" id="quality" min="70" max="100" step="1" value="95">
+          <span class="val" id="qualityVal">95</span>
+        </div>
+        <p class="note">95 es visualmente idéntico al original. 100 evita casi toda pérdida, pero pesa más.</p>
+      </div>
+
+      <label class="check">
+        <input type="checkbox" id="keepView" checked>
+        Mantener el encuadre al cambiar de foto
+      </label>
+      <p class="note">Te acercas una vez al sello y al pasar de foto sigues viendo esa misma esquina.</p>
+
+      <hr>
+
+      <button id="btnDelete" style="width:100%;border-color:rgba(229,115,75,.4);color:#F0A98D">
+        Eliminar esta foto de la lista
+      </button>
+    </div>
+  </section>
+</main>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+   1. LECTOR DE EXIF
+   Lee, del propio archivo JPG, la fecha y hora en que se tomó la
+   foto (DateTimeOriginal) y su orientación. Nada se inventa: si el
+   archivo no trae el dato, se avisa en pantalla.
+═══════════════════════════════════════════════════════════ */
+function readExif(buf){
+  const dv = new DataView(buf);
+  if (dv.getUint16(0) !== 0xFFD8) return null;          // no es JPEG
+  let off = 2;
+  while (off + 4 < dv.byteLength) {
+    const marker = dv.getUint16(off);
+    if ((marker & 0xFF00) !== 0xFF00) break;
+    const size = dv.getUint16(off + 2);
+    if (marker === 0xFFE1 && dv.getUint32(off + 4) === 0x45786966) { // "Exif"
+      return readTiff(dv, off + 10);
+    }
+    off += 2 + size;
+  }
+  return null;
+}
+
+function readTiff(dv, start){
+  const le = dv.getUint16(start) === 0x4949;            // II = little endian
+  const u16 = o => dv.getUint16(o, le);
+  const u32 = o => dv.getUint32(o, le);
+  const i16 = o => dv.getInt16(o, le);
+  const i32 = o => dv.getInt32(o, le);
+  if (u16(start + 2) !== 0x002A) return null;
+
+  /* `all` guarda TODOS los campos que traiga el archivo, para el
+     inspector de metadatos. `date` y `orientation` se mantienen tal
+     cual: el resto del programa depende de ellos. */
+  const out = { date:null, orientation:1, all:{ Imagen:[], Cámara:[], GPS:[] } };
+  const SIZES = {1:1, 2:1, 3:2, 4:4, 5:8, 7:1, 9:4, 10:8};
+
+  const ascii = (o, n) => {
+    let s = '';
+    for (let i = 0; i < n - 1; i++) {
+      const c = dv.getUint8(o + i);
+      if (c === 0) break;
+      s += String.fromCharCode(c);
+    }
+    return s;
+  };
+
+  /* Convierte un campo EXIF a texto legible, sea del tipo que sea. */
+  const readVal = (vo, type, count) => {
+    try {
+      if (type === 2) return ascii(vo, count);                    // texto
+      if (type === 7) return `(${count} bytes)`;                  // binario
+      const vals = [];
+      for (let k = 0; k < Math.min(count, 8); k++) {
+        if (type === 1)       vals.push(dv.getUint8(vo + k));
+        else if (type === 3)  vals.push(u16(vo + k * 2));
+        else if (type === 4)  vals.push(u32(vo + k * 4));
+        else if (type === 9)  vals.push(i32(vo + k * 4));
+        else if (type === 5) {                                    // fracción
+          const a = u32(vo + k * 8), b = u32(vo + k * 8 + 4);
+          vals.push(b ? (a / b) : 0);
+        } else if (type === 10) {
+          const a = i32(vo + k * 8), b = i32(vo + k * 8 + 4);
+          vals.push(b ? (a / b) : 0);
+        }
+      }
+      let t = vals.map(v => typeof v === 'number' ? +v.toFixed(6) : v).join(', ');
+      if (count > 8) t += ', …';
+      return t;
+    } catch (e) { return '—'; }
+  };
+
+  const walk = (ifd, tags, collect) => {
+    if (ifd + 2 > dv.byteLength) return;
+    const n = u16(ifd);
+    for (let i = 0; i < n; i++) {
+      const e = ifd + 2 + i * 12;
+      if (e + 12 > dv.byteLength) return;
+      const tag = u16(e), type = u16(e + 2), count = u32(e + 4);
+      let vo = e + 8;
+      if ((SIZES[type] || 1) * count > 4) vo = start + u32(e + 8);
+      if (tags[tag]) tags[tag](vo, count);
+
+      // Recolección para el inspector (solo lectura)
+      if (collect) {
+        const name = TAGS[tag];
+        if (name && tag !== 0x8769 && tag !== 0x8825) {
+          out.all[collect].push([name, readVal(vo, type, count)]);
+        }
+      }
+    }
+  };
+
+  let exifIFD = 0, gpsIFD = 0;
+  walk(start + u32(start + 4), {
+    0x0112: vo => { out.orientation = u16(vo); },         // Orientation
+    0x8769: vo => { exifIFD = start + u32(vo); },         // puntero al sub-IFD
+    0x8825: vo => { gpsIFD  = start + u32(vo); }          // puntero al IFD de GPS
+  }, 'Imagen');
+
+  if (exifIFD) {
+    walk(exifIFD, {
+      0x9003: (vo, n) => { out.date = ascii(vo, n); }     // DateTimeOriginal
+    }, 'Cámara');
+  }
+  if (gpsIFD) walk(gpsIFD, {}, 'GPS');
+
+  return out;
+}
+
+/* Nombres legibles de los campos EXIF más habituales. Lo que no esté
+   aquí simplemente no se muestra (evita llenar el panel de ruido). */
+const TAGS = {
+  0x010F:'Fabricante',        0x0110:'Modelo de cámara',
+  0x0112:'Orientación',       0x0131:'Software',
+  0x0132:'Fecha de archivo',  0x013B:'Autor',
+  0x8298:'Copyright',         0x011A:'Resolución X',
+  0x011B:'Resolución Y',      0x0128:'Unidad de resolución',
+  0x010E:'Descripción',
+  0x9003:'Fecha de captura',  0x9004:'Fecha de digitalización',
+  0x829A:'Tiempo de exposición', 0x829D:'Apertura (f)',
+  0x8827:'ISO',               0x920A:'Distancia focal',
+  0x9209:'Flash',             0xA002:'Ancho (px)',
+  0xA003:'Alto (px)',         0xA405:'Focal equiv. 35mm',
+  0x9286:'Comentario',        0xA430:'Propietario',
+  0xA433:'Marca del objetivo',0xA434:'Modelo del objetivo',
+  0x0001:'Ref. latitud',      0x0002:'Latitud',
+  0x0003:'Ref. longitud',     0x0004:'Longitud',
+  0x0005:'Ref. altitud',      0x0006:'Altitud',
+  0x0007:'Hora GPS (UTC)',    0x001D:'Fecha GPS'
+};
+
+/* "2025:12:03 18:52:52"  →  Date */
+function exifToDate(s){
+  const m = /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(s || '');
+  if (!m) return null;
+  const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+  return isNaN(d) ? null : d;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   2. FORMATO DEL SELLO
+   Mismo formato de la referencia: "Dec 3, 2025 at 6:52:52 PM"
+═══════════════════════════════════════════════════════════ */
+const MES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function stampDate(d){
+  let h = d.getHours();
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  const p = n => String(n).padStart(2, '0');
+  return `${MES[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} at ${h}:${p(d.getMinutes())}:${p(d.getSeconds())} ${ap}`;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   3. ESTADO
+═══════════════════════════════════════════════════════════ */
+const photos = [];      // {file, url, bmp, exifDate, mtime, orientation, lines[]}
+let current = -1;
+
+const $ = id => document.getElementById(id);
+const listEl = $('list'), stage = $('stage'), statusEl = $('status');
+
+/* Referencias FIJAS. Antes se buscaban con getElementById cada vez,
+   pero draw() hace stage.innerHTML='' — eso los desconecta del
+   documento y getElementById devuelve null. Guardarlos aquí evita
+   que draw() se rompa a mitad y deje la interfaz a medias. */
+const zoomBar = $('zoombar'), hintEl = $('hint');
+
+/* ═══════════════════════════════════════════════════════════
+   4. CARGA
+═══════════════════════════════════════════════════════════ */
+$('drop').onclick = () => $('file').click();
+$('file').onchange = e => addFiles([...e.target.files]);
+
+['dragenter','dragover'].forEach(ev =>
+  $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.add('over'); })
+);
+['dragleave','drop'].forEach(ev =>
+  $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.remove('over'); })
+);
+$('drop').addEventListener('drop', e => {
+  addFiles([...e.dataTransfer.files].filter(f => /jpe?g$/i.test(f.name)));
+});
+
+async function addFiles(files){
+  if (!files.length) return;
+  statusEl.textContent = 'Leyendo fechas…';
+
+  for (const f of files) {
+    const buf = await f.arrayBuffer();
+    const ex = readExif(buf);
+    const d  = ex ? exifToDate(ex.date) : null;
+
+    const p = {
+      file: f,
+      url: URL.createObjectURL(f),
+      exifDate: d,
+      mtime: new Date(f.lastModified),
+      orientation: ex ? (ex.orientation || 1) : 1,
+      lines: null,
+      usedMtime: false,
+      rename: '',         // nombre elegido por ti para la exportación
+      meta: ex ? ex.all : null,   // metadatos completos (solo lectura)
+      bytes: f.size
+    };
+    p.lines = buildLines(p);
+    photos.push(p);
+  }
+
+  renderList();
+  if (current < 0 && photos.length) select(0);
+  statusEl.textContent = '';
+  refreshHeader();
+}
+
+/* Líneas por defecto: fecha real + pie fijo */
+function buildLines(p){
+  const extra = $('extra').value.split('\n').map(s => s.trim()).filter(Boolean);
+  const head  = p.exifDate ? stampDate(p.exifDate) : '';
+  return [head, ...extra].filter((l, i) => i === 0 ? true : true);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   5. LISTA
+═══════════════════════════════════════════════════════════ */
+function renderList(){
+  listEl.innerHTML = '';
+  photos.forEach((p, i) => {
+    const has = !!p.exifDate;
+    const el = document.createElement('div');
+    el.className = 'item' + (i === current ? ' sel' : '');
+    el.innerHTML = `
+      <span class="dot ${has ? 'ok' : 'bad'}"></span>
+      <img src="${p.url}" alt="">
+      <span class="meta">
+        <span class="nm">${p.rename || p.file.name}</span>
+        <span class="dt ${has ? '' : 'bad'}">${
+          has ? stampDate(p.exifDate) : 'sin fecha EXIF'
+        }</span>
+      </span>
+      <button class="del" title="Eliminar de la lista">&times;</button>`;
+    el.onclick = () => select(i);
+    el.querySelector('.del').onclick = ev => { ev.stopPropagation(); removePhoto(i); };
+    listEl.appendChild(el);
+  });
+}
+
+/* Elimina una foto de la lista (la borrosa, la repetida...).
+   No toca tu archivo original en el disco: solo la saca de aquí. */
+function removePhoto(i){
+  const p = photos[i];
+  if (!p) return;
+
+  URL.revokeObjectURL(p.url);
+  if (p.bmp && p.bmp.close) { try { p.bmp.close(); } catch (e) {} }
+  photos.splice(i, 1);
+
+  // Reubicar la selección tras el hueco que dejó la foto borrada
+  if (photos.length === 0) {
+    current = -1;
+    cv = null;
+  } else if (current === i) {
+    current = Math.min(i, photos.length - 1);
+  } else if (current > i) {
+    current -= 1;
+  }
+
+  // La lista y el contador se refrescan SIEMPRE, pase lo que pase
+  renderList();
+  refreshHeader();
+
+  if (photos.length === 0) {
+    stage.innerHTML = '<div class="empty">Sin fotos cargadas.</div>';
+    stage.appendChild(zoomBar);
+    stage.appendChild(hintEl);
+    zoomBar.style.display = 'none';
+    hintEl.style.display  = 'none';
+    $('editor').style.display = 'none';
+    $('noSel').style.display  = 'block';
+  } else {
+    select(current);
+  }
+
+  statusEl.textContent = `Eliminada. Quedan ${photos.length}.`;
+  setTimeout(() => statusEl.textContent = '', 1800);
+}
+
+function refreshHeader(){
+  const n = photos.length;
+  const bad = photos.filter(p => !p.exifDate).length;
+  $('hdrCount').textContent = n
+    ? `${n} foto${n > 1 ? 's' : ''}${bad ? ` · ${bad} sin fecha` : ''}`
+    : 'Sin fotos';
+  $('btnExport').disabled = !n;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   6. SELECCIÓN Y VISTA PREVIA
+═══════════════════════════════════════════════════════════ */
+async function select(i){
+  const keep = $('keepView').checked && cv && zoom > fitZoom * 1.05;
+  const prevZoom = zoom;
+
+  current = i;
+  const p = photos[i];
+  renderList();
+
+  $('noSel').style.display = 'none';
+  $('editor').style.display = 'block';
+  $('warnNoExif').style.display = (!p.exifDate && !p.usedMtime) ? 'block' : 'none';
+  $('lines').value = p.lines.join('\n');
+  $('rename').value = p.rename || '';
+  showMeta(p);
+
+  if (!p.bmp) p.bmp = await createImageBitmap(p.file);
+
+  if (keep) {
+    /* Venías acercado al sello: la foto nueva se abre al MISMO zoom y
+       anclada a la esquina superior derecha, donde vive el sello. Así
+       revisas 75 fotos seguidas sin reencuadrar ni una vez.
+       Se pasa `true` a draw() para que NO vuelva a encajar la foto. */
+    draw(true);
+    zoom = prevZoom;
+    const r = stage.getBoundingClientRect();
+    panX = r.width - cv.width * zoom - 12;
+    panY = 12;
+    applyView();
+  } else {
+    /* Caso normal: la foto se abre ENTERA y centrada en el marco. */
+    draw();
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   INSPECTOR DE METADATOS — SOLO LECTURA
+   Muestra lo que el archivo contiene realmente. No escribe nada:
+   los metadatos son el registro de origen de la foto, y esta
+   herramienta los lee, no los altera.
+═══════════════════════════════════════════════════════════ */
+function showMeta(p){
+  const box = $('metaBody');
+  const kb = (p.bytes / 1024).toFixed(0);
+
+  // Datos que siempre podemos mostrar, vengan o no en el EXIF
+  const basicos = [
+    ['Archivo', p.file.name],
+    ['Tamaño', kb + ' KB'],
+    ['Tipo', p.file.type || 'image/jpeg'],
+    ['Modificado', p.mtime.toLocaleString()]
+  ];
+  if (p.bmp) basicos.push(['Resolución', `${p.bmp.width} × ${p.bmp.height} px`]);
+
+  let html = '<div class="meta-sec">Archivo</div>';
+  html += basicos.map(([k, v]) =>
+    `<div class="meta-row"><span class="k">${k}</span><span class="v">${v}</span></div>`
+  ).join('');
+
+  const m = p.meta;
+  const total = m ? (m.Imagen.length + m['Cámara'].length + m.GPS.length) : 0;
+
+  if (!total) {
+    html += `<div class="meta-sec">EXIF</div>
+      <div class="meta-none">
+        <b>Esta imagen no contiene metadatos EXIF.</b><br>
+        Es lo normal en fotos que pasaron por WhatsApp, Telegram o
+        capturas de pantalla: esas apps los eliminan al comprimir.
+        El original de la cámara sí los conserva.
+      </div>`;
+  } else {
+    for (const sec of ['Imagen', 'Cámara', 'GPS']) {
+      const rows = m[sec];
+      if (!rows.length) continue;
+      html += `<div class="meta-sec">${sec}</div>`;
+      html += rows.map(([k, v]) =>
+        `<div class="meta-row"><span class="k">${k}</span><span class="v">${
+          String(v).slice(0, 60) || '—'
+        }</span></div>`
+      ).join('');
+    }
+  }
+  box.innerHTML = html;
+  $('metaBox').querySelector('summary').textContent =
+    total ? `Metadatos del archivo · ${total} campos` : 'Metadatos del archivo · ninguno';
+}
+
+$('lines').oninput = () => {
+  if (current < 0) return;
+  photos[current].lines = $('lines').value.split('\n');
+  draw(true);        // mantiene el zoom mientras editas
+};
+
+/* Renombrar: se guarda por foto y la lista lo refleja al momento.
+   Solo afecta al archivo EXPORTADO — el original no se toca. */
+$('rename').oninput = () => {
+  if (current < 0) return;
+  photos[current].rename = $('rename').value;
+  renderList();
+};
+
+$('btnDelete').onclick = () => { if (current >= 0) removePhoto(current); };
+
+$('btnResetOne').onclick = () => {
+  const p = photos[current];
+  if (!p) return;
+  p.usedMtime = false;
+  p.lines = buildLines(p);
+  $('lines').value = p.lines.join('\n');
+  $('warnNoExif').style.display = p.exifDate ? 'none' : 'block';
+  draw(); renderList();
+};
+
+$('btnUseMtime').onclick = () => {
+  const p = photos[current];
+  if (!p) return;
+  p.usedMtime = true;
+  const extra = $('extra').value.split('\n').map(s => s.trim()).filter(Boolean);
+  p.lines = [stampDate(p.mtime), ...extra];
+  $('lines').value = p.lines.join('\n');
+  $('warnNoExif').style.display = 'none';
+  draw();
+};
+
+/* Aplica el pie fijo a TODAS, conservando la fecha propia de cada una */
+$('btnApplyExtra').onclick = () => {
+  const extra = $('extra').value.split('\n').map(s => s.trim()).filter(Boolean);
+  photos.forEach(p => { p.lines = [p.lines[0] || '', ...extra]; });
+  if (current >= 0) $('lines').value = photos[current].lines.join('\n');
+  draw();
+  statusEl.textContent = `Pie aplicado a ${photos.length} foto(s).`;
+  setTimeout(() => statusEl.textContent = '', 2200);
+};
+
+['size','pad','quality'].forEach(id => {
+  $(id).oninput = () => {
+    $('sizeVal').textContent    = ($('size').value / 10).toFixed(1) + '%';
+    $('padVal').textContent     = ($('pad').value / 10).toFixed(1) + '%';
+    $('qualityVal').textContent = $('quality').value;
+    if (id !== 'quality') draw();
+  };
+});
+
+/* ═══════════════════════════════════════════════════════════
+   7. DIBUJO
+   Se pinta a resolución COMPLETA (no se reescala la foto), así no
+   se pierde detalle. Se respeta la orientación EXIF para que las
+   fotos verticales no salgan tumbadas.
+═══════════════════════════════════════════════════════════ */
+function renderTo(canvas, p){
+  const bmp = p.bmp;
+  const o = p.orientation;
+  const swap = o >= 5 && o <= 8;
+  const W = swap ? bmp.height : bmp.width;
+  const H = swap ? bmp.width  : bmp.height;
+
+  canvas.width = W; canvas.height = H;
+  const g = canvas.getContext('2d');
+
+  g.save();
+  switch (o) {
+    case 2: g.translate(W, 0); g.scale(-1, 1); break;
+    case 3: g.translate(W, H); g.rotate(Math.PI); break;
+    case 4: g.translate(0, H); g.scale(1, -1); break;
+    case 5: g.rotate(.5 * Math.PI); g.scale(1, -1); break;
+    case 6: g.rotate(.5 * Math.PI); g.translate(0, -H); break;
+    case 7: g.rotate(.5 * Math.PI); g.translate(W, -H); g.scale(-1, 1); break;
+    case 8: g.rotate(-.5 * Math.PI); g.translate(-W, 0); break;
+  }
+  g.drawImage(bmp, 0, 0);
+  g.restore();
+
+  const lines = (p.lines || []).filter(l => l.trim() !== '');
+  if (!lines.length) return;
+
+  // El tamaño se calcula sobre el lado menor: así el sello se ve
+  // igual de grande en fotos verticales y horizontales.
+  const base = Math.min(W, H);
+  const fs   = base * ($('size').value / 1000);
+  const pad  = base * ($('pad').value  / 1000);
+  const lh   = fs * 1.28;
+
+  g.font = `${$('weight').value} ${fs}px ${$('font').value}`;
+  g.textAlign = 'right';
+  g.textBaseline = 'top';
+
+  /* Sombra suave: mantiene el texto legible sobre cielo claro o fondo
+     oscuro por igual. Si la tinta es negra, la sombra se vuelve clara
+     para que no se pierda sobre fondos oscuros. */
+  const dark = inkColor === '#1A1A1A';
+  g.shadowColor = dark ? 'rgba(255,255,255,.65)' : 'rgba(0,0,0,.72)';
+  g.shadowBlur = fs * 0.22;
+  g.shadowOffsetY = fs * 0.04;
+  g.fillStyle = inkColor;
+
+  lines.forEach((t, i) => g.fillText(t, W - pad, pad + i * lh));
+  g.shadowColor = 'transparent';
+}
+
+/* ═══════════════════════════════════════════════════════════
+   7b. ZOOM Y PANEO
+   La foto se pinta a resolución completa en el lienzo; lo que se
+   mueve es la VISTA (transform CSS), así el zoom no degrada nada
+   ni obliga a redibujar. Rueda = zoom hacia el cursor, arrastrar =
+   mover, doble clic = ajustar. El botón "Sello" salta directo a la
+   esquina del sello al 100%, que es lo que hay que revisar.
+═══════════════════════════════════════════════════════════ */
+let cv = null;                 // lienzo visible
+let zoom = 1, panX = 0, panY = 0, fitZoom = 1;
+
+function applyView(){
+  if (!cv) return;
+  cv.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+  $('zLvl').textContent = Math.round(zoom * 100) + '%';
+}
+
+/* Encaja la foto ENTERA dentro del marco y la centra. Es el estado
+   con el que se abre siempre una foto nueva: se ve completa, sin zoom
+   y sin tener que buscarla. */
+function fitToStage(){
+  if (!cv) return;
+  const r = stage.getBoundingClientRect();
+  if (!r.width || !r.height) return;                 // aún sin medidas
+  const M = 24;                                      // margen respirable
+  fitZoom = Math.min(
+    (r.width  - M) / cv.width,
+    (r.height - M) / cv.height
+  );
+  if (!isFinite(fitZoom) || fitZoom <= 0) fitZoom = 1;
+  zoom = fitZoom;
+  panX = (r.width  - cv.width  * zoom) / 2;
+  panY = (r.height - cv.height * zoom) / 2;
+  applyView();
+}
+
+/* Salta a la esquina del sello, al 100%: el punto que hay que revisar */
+function gotoStamp(){
+  if (!cv) return;
+  const r = stage.getBoundingClientRect();
+  zoom = 1;                                    // tamaño real
+  panX = r.width - cv.width * zoom - 12;       // esquina superior derecha
+  panY = 12;
+  applyView();
+}
+
+function zoomAt(factor, cx, cy){
+  if (!cv) return;
+  const next = Math.min(8, Math.max(fitZoom * 0.5, zoom * factor));
+  // Mantiene fijo el punto bajo el cursor
+  panX = cx - (cx - panX) * (next / zoom);
+  panY = cy - (cy - panY) * (next / zoom);
+  zoom = next;
+  applyView();
+}
+
+stage.addEventListener('wheel', e => {
+  if (!cv) return;
+  e.preventDefault();
+  const r = stage.getBoundingClientRect();
+  zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX - r.left, e.clientY - r.top);
+}, { passive:false });
+
+let dragging = false, lastX = 0, lastY = 0;
+stage.addEventListener('pointerdown', e => {
+  if (!cv) return;
+  dragging = true; lastX = e.clientX; lastY = e.clientY;
+  stage.classList.add('drag');
+  stage.setPointerCapture(e.pointerId);
+});
+stage.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  panX += e.clientX - lastX;
+  panY += e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  applyView();
+});
+['pointerup','pointercancel'].forEach(ev =>
+  stage.addEventListener(ev, () => { dragging = false; stage.classList.remove('drag'); })
+);
+stage.addEventListener('dblclick', fitToStage);
+
+$('zIn').onclick  = () => { const r = stage.getBoundingClientRect(); zoomAt(1.3, r.width/2, r.height/2); };
+$('zOut').onclick = () => { const r = stage.getBoundingClientRect(); zoomAt(1/1.3, r.width/2, r.height/2); };
+$('zFit').onclick = fitToStage;
+$('zStamp').onclick = gotoStamp;
+
+function draw(keepView){
+  if (current < 0) return;
+  const p = photos[current];
+  if (!p.bmp) return;
+
+  const c = document.createElement('canvas');
+  renderTo(c, p);
+
+  stage.innerHTML = '';
+  stage.appendChild(c);
+  cv = c;
+
+  zoomBar.style.display = 'flex';
+  hintEl.style.display = 'block';
+  stage.appendChild(zoomBar);
+  stage.appendChild(hintEl);
+
+  /* keepView solo lo pide la edición de texto (para no reencuadrar a
+     cada tecla). En cualquier otro caso la foto se abre ENCAJADA. */
+  if (keepView && zoom > 0) applyView();
+  else fitToStage();
+
+  // El navegador puede no tener aún las medidas del marco: se reintenta
+  // en el siguiente fotograma para asegurar el encuadre.
+  if (!keepView) requestAnimationFrame(fitToStage);
+}
+
+window.addEventListener('resize', () => { if (cv) fitToStage(); });
+
+/* ═══════════════════════════════════════════════════════════
+   8. EXPORTACIÓN — ZIP sin librerías (método "store")
+   Los JPG ya vienen comprimidos: no comprimir de nuevo es más
+   rápido y no cuesta tamaño.
+═══════════════════════════════════════════════════════════ */
+const CRC = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(u8){
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < u8.length; i++) c = CRC[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function makeZip(entries){
+  const enc = new TextEncoder();
+  const chunks = [], central = [];
+  let offset = 0;
+
+  const dosTime = () => {
+    const d = new Date();
+    const t = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+    const dt = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    return [t, dt];
+  };
+  const [tm, dt] = dosTime();
+
+  for (const { name, data } of entries) {
+    const nb = enc.encode(name);
+    const crc = crc32(data);
+
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034B50, true);
+    lh.setUint16(4, 20, true); lh.setUint16(6, 0, true);
+    lh.setUint16(8, 0, true);                       // store
+    lh.setUint16(10, tm, true); lh.setUint16(12, dt, true);
+    lh.setUint32(14, crc, true);
+    lh.setUint32(18, data.length, true);
+    lh.setUint32(22, data.length, true);
+    lh.setUint16(26, nb.length, true); lh.setUint16(28, 0, true);
+
+    chunks.push(new Uint8Array(lh.buffer), nb, data);
+
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014B50, true);
+    ch.setUint16(4, 20, true); ch.setUint16(6, 20, true);
+    ch.setUint16(8, 0, true); ch.setUint16(10, 0, true);
+    ch.setUint16(12, tm, true); ch.setUint16(14, dt, true);
+    ch.setUint32(16, crc, true);
+    ch.setUint32(20, data.length, true);
+    ch.setUint32(24, data.length, true);
+    ch.setUint16(28, nb.length, true);
+    ch.setUint16(30, 0, true); ch.setUint16(32, 0, true);
+    ch.setUint16(34, 0, true); ch.setUint16(36, 0, true);
+    ch.setUint32(38, 0, true);
+    ch.setUint32(42, offset, true);
+    central.push(new Uint8Array(ch.buffer), nb);
+
+    offset += 30 + nb.length + data.length;
+  }
+
+  const cSize = central.reduce((s, c) => s + c.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054B50, true);
+  end.setUint16(8, entries.length, true);
+  end.setUint16(10, entries.length, true);
+  end.setUint32(12, cSize, true);
+  end.setUint32(16, offset, true);
+
+  return new Blob([...chunks, ...central, new Uint8Array(end.buffer)], { type:'application/zip' });
+}
+
+$('btnExport').onclick = async () => {
+  const btn = $('btnExport');
+  btn.disabled = true;
+  $('bar').classList.add('on');
+
+  const q = $('quality').value / 100;
+  const entries = [];
+  const used = new Set();
+
+  for (let i = 0; i < photos.length; i++) {
+    const p = photos[i];
+    statusEl.textContent = `Sellando ${i + 1} de ${photos.length}…`;
+    $('barFill').style.width = ((i / photos.length) * 100) + '%';
+
+    if (!p.bmp) p.bmp = await createImageBitmap(p.file);
+    const c = document.createElement('canvas');
+    renderTo(c, p);
+
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', q));
+    const buf  = new Uint8Array(await blob.arrayBuffer());
+
+    /* Nombre de salida: el que tú escribiste, o el original si lo
+       dejaste en blanco. Se limpian los caracteres que no admiten los
+       sistemas de archivos, y se numera si hay repetidos, para que
+       ninguna foto sobrescriba a otra. */
+    const custom = (p.rename || '').trim();
+    const stem = custom
+      ? custom.replace(/[\\/:*?"<>|]/g, '-').slice(0, 90)
+      : p.file.name.replace(/\.jpe?g$/i, '') + '-sellada';
+
+    let name = stem + '.jpg';
+    let n = 2;
+    while (used.has(name)) name = `${stem} (${n++}).jpg`;
+    used.add(name);
+
+    entries.push({ name, data: buf });
+    await new Promise(r => setTimeout(r));   // deja respirar a la interfaz
+  }
+
+  $('barFill').style.width = '100%';
+  statusEl.textContent = 'Empaquetando…';
+
+  const zip = makeZip(entries);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(zip);
+  a.download = 'fotos-selladas.zip';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+
+  statusEl.textContent = `Listo: ${entries.length} foto(s) exportadas.`;
+  $('bar').classList.remove('on');
+  $('barFill').style.width = '0';
+  btn.disabled = false;
+};
+
+/* ═══ Colores del sello (blanco por defecto) ═══ */
+const COLORS = [
+  ['#FFFFFF','Blanco'], ['#F2E8CF','Crema'],  ['#FFD84D','Amarillo'],
+  ['#FF5C5C','Rojo'],   ['#5CE07A','Verde'],  ['#4FD8FF','Cian'],
+  ['#FF7FC4','Rosa'],   ['#1A1A1A','Negro']
+];
+let inkColor = '#FFFFFF';
+
+const swBox = $('swatches');
+COLORS.forEach(([hex, name]) => {
+  const b = document.createElement('button');
+  b.className = 'sw' + (hex === inkColor ? ' on' : '');
+  b.style.background = hex;
+  b.title = name;
+  b.onclick = () => {
+    inkColor = hex;
+    [...swBox.children].forEach(c => c.classList.remove('on'));
+    b.classList.add('on');
+    draw(true);
+  };
+  swBox.appendChild(b);
+});
+
+['font','weight'].forEach(id => $(id).onchange = () => draw(true));
+
+/* El lienzo dibuja con la fuente que esté YA cargada. Si Roboto llega
+   tarde, el primer sello saldría con la de reserva — por eso, en cuanto
+   las fuentes están listas, se vuelve a dibujar. */
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(() => { if (current >= 0) draw(true); });
+}
+
+/* Pie por defecto (edítalo a tu gusto) */
+$('extra').value = '';
+</script>
+</body>
+</html>
