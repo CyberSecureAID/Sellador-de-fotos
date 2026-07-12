@@ -65,6 +65,7 @@
         <button id="zFit" title="Ajustar a la ventana">Ajustar</button>
         <button id="zStamp" title="Ver el sello al 100%">Sello</button>
         <button id="zCrop" title="Recortar la imagen">Recortar</button>
+        <button id="zVector" title="Ver la imagen vectorizada en el área de trabajo">Vectorizar</button>
       </div>
       <span class="stage-title" id="stageTitle">Vista previa</span>
     </div>
@@ -276,6 +277,13 @@
      Fuente: https://github.com/jankovicsandras/imagetracerjs
      Si el CDN no carga, la app avisa y el resto sigue funcionando. -->
 <script src="https://cdn.jsdelivr.net/npm/imagetracerjs@1.2.6/imagetracer_v1.2.6.js"></script>
+<script>
+  /* Respaldo: si el primer CDN falla, se prueba otro antes de rendirse.
+     (Carga síncrona con document.write para que app.js ya la encuentre.) */
+  if (typeof ImageTracer === 'undefined') {
+    document.write('<scr' + 'ipt src="https://unpkg.com/imagetracerjs@1.2.6/imagetracer_v1.2.6.js"><\/scr' + 'ipt>');
+  }
+</script>
 <script src="js/app.js"></script>
 </body>
 </html>
