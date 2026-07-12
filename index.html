@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sellador de fotos — fecha real (EXIF)</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <!-- Roboto: es la fuente de la foto de referencia (la que usan las apps
      de sellado en Android). Si no hay internet, cae a Helvetica/Arial,
      que son casi idénticas en este tamaño. -->
@@ -17,6 +18,7 @@
 <header>
   <div class="logo">◉</div>
   <h1>Sellador de fotos</h1>
+  <span class="credit" title="Desarrollador">Jesús Pérez Cuellar · <b>JesusDevTrader</b></span>
   <span class="count" id="hdrCount">Sin fotos</span>
   <div class="spacer"></div>
   <input type="text" id="zipName" value="fotos-selladas"
@@ -69,7 +71,17 @@
         <button id="zStamp" title="Ver el sello al 100%">Sello</button>
         <button id="zCrop" title="Recortar la imagen">Recortar</button>
       </div>
-      <span class="stage-title" id="stageTitle">Vista previa</span>
+      <div class="crop-actions" id="cropActions" style="display:none">
+        <button class="btn-go btn-sm" id="cropApply">Aplicar recorte</button>
+        <button class="btn-sm" id="cropReset">Todo</button>
+        <button class="btn-sm" id="cropCancel">Cancelar</button>
+      </div>
+      <!-- REDIMENSIONAR: ocupa el lugar del antiguo texto "Vista previa" -->
+      <div class="resize-ctl" id="resizeCtl" style="display:none">
+        <label for="resizePct">Tamaño</label>
+        <input type="range" id="resizePct" min="10" max="100" step="5" value="100">
+        <span class="resize-val" id="resizeVal">100%</span>
+      </div>
     </div>
     <div class="stage" id="stage">
       <div class="empty">Carga fotos para empezar.<br>El sello se dibuja con la fecha real del archivo.</div>
@@ -87,11 +99,6 @@
           <span class="ch e" data-h="e"></span>
         </div>
         <span class="crop-size" id="cropSize"></span>
-        <div class="crop-actions">
-          <button class="btn-go btn-sm" id="cropApply">Aplicar recorte</button>
-          <button class="btn-sm" id="cropReset">Todo</button>
-          <button class="btn-sm" id="cropCancel">Cancelar</button>
-        </div>
       </div>
     </div>
     <div class="status" id="status"></div>
@@ -105,14 +112,7 @@
     <div id="noSel" class="empty" style="padding:20px 0">Elige una foto de la lista.</div>
 
     <div id="editor" style="display:none">
-      <div id="warnNoExif" class="alert" style="display:none">
-        <b>Sin fecha EXIF.</b> Este archivo no guarda cuándo se tomó.
-        Puedes usar la fecha de modificación del archivo, pero es menos fiable
-        (cambia al copiar o editar).
-        <div style="margin-top:8px">
-          <button class="btn-sm" id="btnUseMtime">Usar fecha de modificación</button>
-        </div>
-      </div>
+      <div class="section-photo"></div>
 
       <div class="field">
         <label for="rename">Nombre al exportar</label>
@@ -130,7 +130,6 @@
       </div>
 
       <div class="row" style="gap:8px;flex-wrap:wrap">
-        <button class="btn-sm" id="btnResetOne">Restaurar fecha EXIF</button>
         <button class="btn-sm" id="btnApplyExtra">Aplicar pie a todas</button>
       </div>
 
