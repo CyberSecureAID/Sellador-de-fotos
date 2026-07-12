@@ -206,7 +206,9 @@ async function addFiles(files){
       usedMtime: false,
       rename: '',         // nombre elegido por ti para la exportación
       crop: null,         // {x,y,w,h} en píxeles — null = imagen entera
-      resize: 100,        // % del tamaño de salida (100 = original)
+      sizeMode: 'none',   // 'none' | 'weight' | 'scale'
+      sizeKB: 150,        // peso objetivo (modo weight)
+      sizePct: 100,       // % de dimensiones (modo scale)
       meta: ex ? ex.all : null,   // metadatos completos (solo lectura)
       bytes: f.size
     };
@@ -289,7 +291,7 @@ function removePhoto(i){
     hintEl.style.display  = 'none';
     $('editor').style.display = 'none';
     $('noSel').style.display  = 'block';
-    $('resizeCtl').style.display = 'none';
+    $('sizeMenu').style.display = 'none';
   } else {
     select(current);
   }
@@ -337,10 +339,9 @@ async function select(i){
   $('rename').value = p.rename || '';
   showMeta(p);
 
-  // Control de tamaño: refleja el valor de esta foto y muestra sus px
-  $('resizeCtl').style.display = 'flex';
-  $('resizePct').value = p.resize != null ? p.resize : 100;
-  updateResizeLabel(p);
+  // Menú de tamaño: refleja la config de esta foto
+  $('sizeMenu').style.display = 'block';
+  refreshSizeMenu(p);
 
   if (!p.bmp) p.bmp = await createImageBitmap(p.file);
 
@@ -413,25 +414,65 @@ function showMeta(p){
     total ? `Metadatos del archivo · ${total} campos` : 'Metadatos del archivo · ninguno';
 }
 
-/* Muestra el % y el tamaño resultante en píxeles, para que sepas
-   exactamente a qué resolución vas a exportar. */
-function updateResizeLabel(p){
-  const pct = +$('resizePct').value;
-  let base = '';
-  if (p && p.bmp) {
-    const o = p.orientation, swap = o >= 5 && o <= 8;
-    let w = swap ? p.bmp.height : p.bmp.width;
-    let h = swap ? p.bmp.width  : p.bmp.height;
-    if (p.crop) { w = Math.round(p.crop.w); h = Math.round(p.crop.h); }
-    base = ` · ${Math.round(w*pct/100)}×${Math.round(h*pct/100)} px`;
-  }
-  $('resizeVal').textContent = pct + '%' + base;
+/* ─── DESPLEGABLE DE TAMAÑO ───
+   Dos modos bien distintos:
+   • 'weight' COMPRIME a un peso objetivo SIN cambiar dimensiones (baja la
+     calidad hasta acercarse a los KB pedidos). La imagen se ve igual de
+     grande, solo pesa menos. Es lo de "pásame el banner a 100 KB".
+   • 'scale' REDUCE las dimensiones en píxeles. La imagen se ve más pequeña.
+*/
+function dimsOf(p){
+  const o = p.orientation, swap = o >= 5 && o <= 8;
+  let w = swap ? p.bmp.height : p.bmp.width;
+  let h = swap ? p.bmp.width  : p.bmp.height;
+  if (p.crop) { w = Math.round(p.crop.w); h = Math.round(p.crop.h); }
+  return { w, h };
 }
 
-$('resizePct').oninput = () => {
+function refreshSizeMenu(p){
+  if (!p) return;
+  $('sizeMode').value = p.sizeMode || 'none';
+  $('sizeKB').value   = p.sizeKB || 150;
+  $('sizePct').value  = p.sizePct || 100;
+  $('sizeKBVal').textContent  = (p.sizeKB || 150) + ' KB';
+  $('sizePctVal').textContent = (p.sizePct || 100) + '%';
+  $('rowWeight').style.display = p.sizeMode === 'weight' ? 'block' : 'none';
+  $('rowScale').style.display  = p.sizeMode === 'scale'  ? 'block' : 'none';
+  if (p.bmp) {
+    const d = dimsOf(p), pc = (p.sizePct || 100) / 100;
+    $('sizePctPx').textContent = `${Math.round(d.w*pc)}×${Math.round(d.h*pc)} px`;
+  }
+  // Etiqueta del botón: refleja el modo activo
+  const lbl = p.sizeMode === 'weight' ? `Tamaño · ≤${p.sizeKB}KB`
+            : p.sizeMode === 'scale'  ? `Tamaño · ${p.sizePct}%`
+            : 'Tamaño';
+  $('sizeToggle').textContent = lbl + ' ▾';
+}
+
+$('sizeToggle').onclick = () => {
+  const pop = $('sizePop');
+  pop.style.display = pop.style.display === 'none' ? 'block' : 'none';
+};
+document.addEventListener('click', e => {
+  if (!$('sizeMenu').contains(e.target)) $('sizePop').style.display = 'none';
+});
+
+$('sizeMode').onchange = () => {
   if (current < 0) return;
-  photos[current].resize = +$('resizePct').value;
-  updateResizeLabel(photos[current]);
+  photos[current].sizeMode = $('sizeMode').value;
+  refreshSizeMenu(photos[current]);
+  draw(true);
+};
+$('sizeKB').oninput = () => {
+  if (current < 0) return;
+  photos[current].sizeKB = +$('sizeKB').value;
+  $('sizeKBVal').textContent = $('sizeKB').value + ' KB';
+  $('sizeToggle').textContent = `Tamaño · ≤${$('sizeKB').value}KB ▾`;
+};
+$('sizePct').oninput = () => {
+  if (current < 0) return;
+  photos[current].sizePct = +$('sizePct').value;
+  refreshSizeMenu(photos[current]);
   draw(true);
 };
 
@@ -532,10 +573,10 @@ function renderTo(canvas, p, ignoreCrop){
   let W = Math.max(1, Math.round(cr.w));
   let H = Math.max(1, Math.round(cr.h));
 
-  /* REDIMENSIONADO: reduce el tamaño real de salida. Por foto (p.resize)
-     o global si no se ha fijado. Se aplica sobre las dimensiones ya
-     recortadas, así el sello se recalcula a la nueva escala. */
-  const pct = (ignoreCrop ? 100 : (p.resize != null ? p.resize : 100)) / 100;
+  /* ESCALA: solo si el modo de tamaño es 'scale'. La compresión a peso
+     (modo 'weight') NO cambia dimensiones: se aplica al exportar, bajando
+     la calidad. En modo recorte se ignora, para ver la foto a escala real. */
+  const pct = (ignoreCrop || p.sizeMode !== 'scale') ? 1 : (p.sizePct || 100) / 100;
   W = Math.max(1, Math.round(W * pct));
   H = Math.max(1, Math.round(H * pct));
 
@@ -1038,6 +1079,30 @@ $('btnExport').onclick = async () => {
     if (fmtKey === 'pdf') {
       const jpg = await new Promise(r => c.toBlob(r, 'image/jpeg', q));
       data = makePdf(new Uint8Array(await jpg.arrayBuffer()), c.width, c.height);
+    } else if (p.sizeMode === 'weight' && F.quality) {
+      /* COMPRESIÓN A PESO OBJETIVO — mantiene las dimensiones intactas.
+         Búsqueda binaria de la calidad que más se acerca (sin pasarse) al
+         peso pedido. Formatos con pérdida (JPG/WebP/AVIF) lo permiten; PNG
+         no (es sin pérdida), así que ahí se ignora. */
+      const target = (p.sizeKB || 150) * 1024;
+      let lo = 0.05, hi = 1, best = null, bestSize = Infinity;
+      for (let it = 0; it < 8; it++) {
+        const mid = (lo + hi) / 2;
+        const b = await new Promise(r => c.toBlob(r, F.mime, mid));
+        const u = new Uint8Array(await b.arrayBuffer());
+        if (u.length <= target) {
+          best = u; bestSize = u.length; lo = mid;   // cabe: intenta más calidad
+        } else {
+          hi = mid;                                   // se pasa: baja calidad
+        }
+        if (best && Math.abs(bestSize - target) / target < 0.05) break;
+      }
+      // Si ni con calidad mínima cabe, se usa la más baja (el mínimo posible)
+      if (!best) {
+        const b = await new Promise(r => c.toBlob(r, F.mime, 0.05));
+        best = new Uint8Array(await b.arrayBuffer());
+      }
+      data = best;
     } else {
       const blob = await new Promise(r =>
         c.toBlob(r, F.mime, F.quality ? q : undefined));
@@ -1087,9 +1152,10 @@ $('btnExport').onclick = async () => {
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 
   exported = true;
+  const kb0 = entries.length ? (entries[0].data.length/1024).toFixed(0) : 0;
   statusEl.textContent = wantZip
-    ? `Listo: ${entries.length} archivo(s) en ${F.ext.toUpperCase()}, dentro de ${base}.zip`
-    : `Listo: ${base}.${F.ext}`;
+    ? `Listo: ${entries.length} archivo(s) en ${F.ext.toUpperCase()}, dentro de ${base}.zip (1ª: ${kb0} KB)`
+    : `Listo: ${base}.${F.ext} · ${kb0} KB`;
 
   } catch (err) {
     /* Cualquier fallo (vectorización, memoria, formato…) se muestra en vez
