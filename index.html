@@ -76,11 +76,37 @@
         <button class="btn-sm" id="cropReset">Todo</button>
         <button class="btn-sm" id="cropCancel">Cancelar</button>
       </div>
-      <!-- REDIMENSIONAR: ocupa el lugar del antiguo texto "Vista previa" -->
-      <div class="resize-ctl" id="resizeCtl" style="display:none">
-        <label for="resizePct">Tamaño</label>
-        <input type="range" id="resizePct" min="10" max="100" step="5" value="100">
-        <span class="resize-val" id="resizeVal">100%</span>
+      <!-- TAMAÑO/PESO: desplegable compacto. Se abre al pulsar. -->
+      <div class="size-menu" id="sizeMenu" style="display:none">
+        <button class="size-btn" id="sizeToggle" title="Ajustar peso y dimensiones">Tamaño ▾</button>
+        <div class="size-pop" id="sizePop" style="display:none">
+          <div class="size-row">
+            <label>Modo</label>
+            <select id="sizeMode">
+              <option value="none" selected>Original (sin cambios)</option>
+              <option value="weight">Comprimir a peso objetivo</option>
+              <option value="scale">Reducir dimensiones (%)</option>
+            </select>
+          </div>
+
+          <div class="size-row" id="rowWeight" style="display:none">
+            <label>Peso objetivo</label>
+            <div class="size-slider">
+              <input type="range" id="sizeKB" min="30" max="1000" step="10" value="150">
+              <span id="sizeKBVal">150 KB</span>
+            </div>
+            <p class="size-note">Mantiene las dimensiones; baja la calidad hasta acercarse a ese peso. La imagen se ve del mismo tamaño, solo pesa menos.</p>
+          </div>
+
+          <div class="size-row" id="rowScale" style="display:none">
+            <label>Dimensiones</label>
+            <div class="size-slider">
+              <input type="range" id="sizePct" min="10" max="100" step="5" value="100">
+              <span id="sizePctVal">100%</span>
+            </div>
+            <p class="size-note" id="sizePctPx"></p>
+          </div>
+        </div>
       </div>
     </div>
     <div class="stage" id="stage">
