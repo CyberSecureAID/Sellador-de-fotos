@@ -1,0 +1,347 @@
+/* ── Cuarto oscuro: carbón cálido + ámbar de luz de seguridad ── */
+  :root{
+    /* Paleta tomada de la foto: negro-verdoso + verde neón de datos,
+       con ámbar como acento secundario (los puntos amarillos del código). */
+    --bg:#0B0F0D; --panel:#111613; --panel-2:#171D19;
+    --line:#25302A; --line-soft:#1C231F;
+    --glass-edge:rgba(80,240,180,.22);
+    --tx:#E6EFE9; --dim:#8FA69B; --faint:#5E6F66;
+    --neon:#37E8A0; --neon-dim:rgba(55,232,160,.16);
+    --amber:#E5A33D; --amber-dim:rgba(229,163,61,.16);
+    --ok:#37E8A0; --warn:#E5734B;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg);color:var(--tx);font-family:var(--sans);
+    font-size:14px;line-height:1.5;min-height:100vh;
+  }
+  h1{font-size:15px;font-weight:600;letter-spacing:-.01em}
+  h2{
+    font-family:var(--mono);font-size:10px;font-weight:500;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--faint);
+    margin-bottom:12px;
+  }
+
+  /* ── Estructura ── */
+  header{
+    position:sticky;top:0;z-index:10;
+    display:flex;align-items:center;gap:16px;
+    padding:14px 20px;
+    /* EFECTO CRISTAL sobre una foto de fondo.
+       La foto (header-bg.webp) va detrás, borrosa y oscurecida; el
+       backdrop-filter difumina lo que quede tras la barra y el
+       degradado semitransparente le da el tinte de "vidrio ahumado".
+       Si la foto no está en la carpeta, el degradado y el color base
+       hacen que el header se vea bien igual (no queda roto). */
+    background:
+      linear-gradient(180deg, rgba(11,16,13,.72), rgba(11,16,13,.86)),
+      var(--panel);
+    border-bottom:1px solid var(--glass-edge);
+    backdrop-filter:blur(3px);
+    overflow:hidden;
+  }
+  /* Capa de la foto: separada, para poder desenfocarla sin afectar
+     al texto de encima. */
+  header::before{
+    content:'';position:absolute;inset:0;z-index:-1;
+    background:url('header-bg.webp') center/cover no-repeat;
+    filter:blur(6px) saturate(1.2) brightness(.5);
+    transform:scale(1.15);   /* evita bordes claros al desenfocar */
+  }
+  /* Brillo verde sutil sobre el borde inferior, como reflejo del cristal */
+  header::after{
+    content:'';position:absolute;left:0;right:0;bottom:0;height:1px;z-index:-1;
+    background:linear-gradient(90deg,transparent,var(--neon),transparent);
+    opacity:.5;
+  }
+  .logo{
+    width:26px;height:26px;border-radius:5px;flex-shrink:0;
+    background:var(--neon-dim);border:1px solid var(--neon);
+    display:grid;place-items:center;color:var(--neon);
+    font-family:var(--mono);font-size:12px;
+    box-shadow:0 0 12px -2px var(--neon);
+  }
+  .spacer{flex:1}
+  .count{font-family:var(--mono);font-size:12px;color:var(--dim)}
+
+  main{
+    display:grid;grid-template-columns:270px 1fr 330px;
+    gap:1px;background:var(--line-soft);
+    height:calc(100vh - 55px);
+  }
+  .col{background:var(--bg);overflow-y:auto;padding:18px}
+  @media(max-width:1100px){
+    main{grid-template-columns:1fr;height:auto}
+    .col{max-height:none}
+  }
+
+  /* ── Botones ── */
+  button{
+    font-family:inherit;font-size:13px;cursor:pointer;
+    border-radius:6px;border:1px solid var(--line);
+    background:var(--panel-2);color:var(--tx);
+    padding:8px 14px;transition:border-color .15s,background .15s;
+  }
+  button:hover:not(:disabled){border-color:var(--faint);background:#2A2620}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button:focus-visible{outline:2px solid var(--neon);outline-offset:2px}
+  .btn-go{
+    background:var(--neon);color:#04140D;border-color:var(--neon);
+    font-weight:600;box-shadow:0 0 16px -4px var(--neon);
+  }
+  .btn-go:hover:not(:disabled){background:#54F5B4;border-color:#54F5B4}
+  .btn-sm{padding:5px 10px;font-size:12px}
+
+  /* ── Zona de carga ── */
+  .drop{
+    border:1.5px dashed var(--line);border-radius:10px;
+    padding:26px 16px;text-align:center;color:var(--dim);
+    cursor:pointer;transition:.15s;
+  }
+  .drop:hover,.drop.over{border-color:var(--neon);background:var(--neon-dim);color:var(--tx)}
+  .drop b{display:block;color:var(--tx);margin-bottom:4px;font-weight:600}
+  .drop small{font-size:11px;color:var(--faint)}
+
+  /* ── Lista de fotos ── */
+  .list{margin-top:16px;display:flex;flex-direction:column;gap:1px}
+  .item{
+    display:flex;align-items:center;gap:10px;padding:8px;
+    border-radius:6px;cursor:pointer;border:1px solid transparent;
+  }
+  .item:hover{background:var(--panel)}
+  .item.sel{background:var(--panel-2);border-color:var(--neon)}
+  .item img{
+    width:44px;height:44px;object-fit:cover;border-radius:4px;
+    background:var(--panel-2);flex-shrink:0;
+  }
+  /* min-width:0 + overflow:hidden = el texto puede encogerse dentro
+     del recuadro. Sin esto, un nombre largo empuja la caja y se sale. */
+  .item .meta{min-width:0;flex:1;overflow:hidden}
+  /* display:block es imprescindible: los puntos suspensivos NO
+     funcionan en elementos en línea (que es lo que era un <span>). */
+  .item .nm{
+    display:block;font-size:12px;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;color:var(--tx);
+  }
+  .item .dt{
+    display:block;font-family:var(--mono);font-size:10px;
+    color:var(--dim);margin-top:2px;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;
+  }
+  .item .dt.bad{color:var(--warn)}
+  .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+  .del{
+    flex-shrink:0;padding:3px 7px;font-size:14px;line-height:1;
+    background:transparent;border:none;color:var(--faint);
+    border-radius:4px;opacity:0;transition:.12s;
+  }
+  .item:hover .del{opacity:1}
+  .del:hover{background:rgba(229,115,75,.18);color:var(--warn)}
+
+  /* Muestras de color */
+  .swatches{display:flex;gap:6px;flex-wrap:wrap}
+  .sw{
+    width:26px;height:26px;border-radius:5px;cursor:pointer;
+    border:2px solid var(--line);padding:0;
+  }
+  .sw:hover{border-color:var(--faint)}
+  .sw.on{border-color:var(--neon);box-shadow:0 0 0 2px var(--neon-dim)}
+
+  .check{
+    display:flex;align-items:center;gap:8px;cursor:pointer;
+    font-size:12px;color:var(--dim);
+  }
+  .check input{accent-color:var(--neon);width:14px;height:14px;cursor:pointer}
+  .dot.ok{background:var(--ok)}
+  .dot.bad{background:var(--warn)}
+
+  /* ── Lienzo ── */
+  .stage-col{display:flex;flex-direction:column}
+  .stage-head{
+    display:flex;align-items:center;gap:12px;margin-bottom:12px;min-height:30px;
+  }
+  .stage-title{
+    font-family:var(--mono);font-size:10px;font-weight:500;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--faint);
+    margin-left:auto;
+  }
+  .stage{
+    position:relative;overflow:hidden;flex:1;
+    display:flex;align-items:center;justify-content:center;
+    /* Más alto por abajo, sin mover la parte superior: antes 62vh,
+       ahora 74vh. La columna es flex, así que el área crece hacia abajo. */
+    height:74vh;min-height:420px;
+    /* Textura de fondo del área de trabajo (patrón verde), oscurecida
+       para que la foto que edites siempre resalte por encima. */
+    background:
+      linear-gradient(rgba(11,15,13,.62), rgba(11,15,13,.72)),
+      url('stage-bg.webp') center/cover no-repeat, var(--panel);
+    border-radius:10px;border:1px solid var(--line);
+    cursor:grab;touch-action:none;
+  }
+  .stage.drag{cursor:grabbing}
+  /* El lienzo se ancla en la esquina (0,0) del escenario.
+     ANTES heredaba el centrado de flexbox Y ADEMÁS recibía el
+     translate del paneo: se posicionaba dos veces y aparecía fuera
+     del marco. Con position:absolute, el transform es la única
+     fuente de posición y fitToStage() puede centrarlo con exactitud. */
+  .stage canvas{
+    position:absolute;top:0;left:0;
+    transform-origin:0 0;border-radius:2px;display:block;
+  }
+  /* Controles de zoom flotantes */
+  .zoombar{
+    display:flex;align-items:center;gap:4px;
+    background:var(--panel-2);border:1px solid var(--line);
+    border-radius:8px;padding:4px;
+  }
+  .zoombar button{
+    padding:4px 9px;font-size:13px;font-family:var(--mono);
+    background:transparent;border:none;color:var(--tx);
+  }
+  .zoombar button:hover{background:var(--panel-2)}
+  .zoombar .lvl{
+    font-family:var(--mono);font-size:11px;color:var(--dim);
+    min-width:44px;text-align:center;
+  }
+  /* ═══ HERRAMIENTA DE RECORTE (estilo Photoshop) ═══
+     El recuadro claro es la zona que se conserva; todo lo de fuera se
+     oscurece con un box-shadow gigante (truco clásico: una sola capa
+     en vez de cuatro divs). Ocho tiradores + rejilla de tercios. */
+  .crop-ui{position:absolute;inset:0;z-index:4;display:none}
+  .crop-ui.on{display:block}
+
+  .crop-box{
+    position:absolute;
+    box-shadow:0 0 0 9999px rgba(0,0,0,.62);
+    outline:1px solid rgba(255,255,255,.9);
+    cursor:move;
+  }
+  /* Rejilla de tercios */
+  .crop-box::before,.crop-box::after{
+    content:'';position:absolute;inset:0;pointer-events:none;
+  }
+  .crop-box::before{
+    background:
+      linear-gradient(to right,transparent 33.33%,rgba(255,255,255,.35) 33.33%,rgba(255,255,255,.35) calc(33.33% + 1px),transparent calc(33.33% + 1px)),
+      linear-gradient(to right,transparent 66.66%,rgba(255,255,255,.35) 66.66%,rgba(255,255,255,.35) calc(66.66% + 1px),transparent calc(66.66% + 1px));
+  }
+  .crop-box::after{
+    background:
+      linear-gradient(to bottom,transparent 33.33%,rgba(255,255,255,.35) 33.33%,rgba(255,255,255,.35) calc(33.33% + 1px),transparent calc(33.33% + 1px)),
+      linear-gradient(to bottom,transparent 66.66%,rgba(255,255,255,.35) 66.66%,rgba(255,255,255,.35) calc(66.66% + 1px),transparent calc(66.66% + 1px));
+  }
+
+  /* Tiradores: escuadras en las esquinas, barras en los lados */
+  .ch{position:absolute;background:#FFF;border-radius:1px}
+  .ch.c{width:14px;height:14px;border:2px solid #14120F}
+  .ch.e{background:rgba(255,255,255,.92);border:1px solid #14120F}
+  .ch[data-h=nw]{left:-7px;top:-7px;cursor:nwse-resize}
+  .ch[data-h=ne]{right:-7px;top:-7px;cursor:nesw-resize}
+  .ch[data-h=sw]{left:-7px;bottom:-7px;cursor:nesw-resize}
+  .ch[data-h=se]{right:-7px;bottom:-7px;cursor:nwse-resize}
+  .ch[data-h=n]{left:50%;top:-4px;width:34px;height:7px;margin-left:-17px;cursor:ns-resize}
+  .ch[data-h=s]{left:50%;bottom:-4px;width:34px;height:7px;margin-left:-17px;cursor:ns-resize}
+  .ch[data-h=w]{top:50%;left:-4px;width:7px;height:34px;margin-top:-17px;cursor:ew-resize}
+  .ch[data-h=e]{top:50%;right:-4px;width:7px;height:34px;margin-top:-17px;cursor:ew-resize}
+
+  .crop-actions{
+    position:absolute;left:50%;top:12px;transform:translateX(-50%);
+    z-index:6;display:flex;gap:6px;
+    background:rgba(20,18,15,.94);border:1px solid var(--line);
+    border-radius:8px;padding:5px;backdrop-filter:blur(6px);
+  }
+  .crop-size{
+    position:absolute;z-index:6;
+    font-family:var(--mono);font-size:10px;color:#FFF;
+    background:rgba(20,18,15,.85);padding:2px 6px;border-radius:4px;
+    pointer-events:none;
+  }
+  .cropped-tag{
+    font-family:var(--mono);font-size:9px;color:var(--amber);
+    margin-left:6px;
+  }
+
+  .empty{color:var(--faint);text-align:center;font-size:13px}
+
+  /* ── Campos ── */
+  .field{margin-bottom:16px}
+  label{
+    display:block;font-family:var(--mono);font-size:10px;
+    letter-spacing:.1em;text-transform:uppercase;
+    color:var(--faint);margin-bottom:6px;
+  }
+  input[type=text],textarea,select{
+    width:100%;background:var(--panel);color:var(--tx);
+    border:1px solid var(--line);border-radius:6px;
+    padding:9px 11px;font-family:var(--mono);font-size:12px;
+    line-height:1.6;resize:vertical;
+  }
+  input:focus,textarea:focus,select:focus{
+    outline:none;border-color:var(--neon);
+  }
+  textarea{min-height:96px}
+  input[type=range]{width:100%;accent-color:var(--neon)}
+  .row{display:flex;gap:8px;align-items:center}
+  .row .val{font-family:var(--mono);font-size:11px;color:var(--dim);min-width:42px;text-align:right}
+
+  .note{
+    font-size:11px;color:var(--faint);line-height:1.5;margin-top:6px;
+  }
+  .alert{
+    background:rgba(229,115,75,.1);border:1px solid rgba(229,115,75,.35);
+    color:#F0A98D;border-radius:6px;padding:9px 11px;
+    font-size:12px;line-height:1.5;margin-bottom:14px;
+  }
+  .alert b{color:var(--warn)}
+  hr{border:none;border-top:1px solid var(--line);margin:18px 0}
+
+  /* Inspector de metadatos (solo lectura) */
+  details.meta-box{
+    border:1px solid var(--line);border-radius:8px;
+    background:var(--panel);margin-top:4px;
+  }
+  details.meta-box summary{
+    cursor:pointer;padding:9px 11px;list-style:none;
+    font-family:var(--mono);font-size:10px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--dim);
+    display:flex;align-items:center;gap:8px;
+  }
+  details.meta-box summary::-webkit-details-marker{display:none}
+  details.meta-box summary::before{content:'▸';font-size:9px;color:var(--faint)}
+  details.meta-box[open] summary::before{content:'▾'}
+  details.meta-box summary:hover{color:var(--tx)}
+  .meta-body{padding:0 11px 11px;max-height:280px;overflow-y:auto}
+  .meta-sec{
+    font-family:var(--mono);font-size:9px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--neon);
+    margin:10px 0 5px;padding-top:8px;border-top:1px solid var(--line-soft);
+  }
+  .meta-sec:first-child{border-top:none;padding-top:0;margin-top:2px}
+  .meta-row{
+    display:flex;justify-content:space-between;gap:10px;
+    padding:3px 0;font-size:11px;border-bottom:1px solid rgba(51,46,39,.4);
+  }
+  .meta-row:last-child{border-bottom:none}
+  .meta-row .k{color:var(--dim);flex-shrink:0}
+  .meta-row .v{
+    font-family:var(--mono);color:var(--tx);text-align:right;
+    word-break:break-word;
+  }
+  .meta-none{
+    font-size:11px;color:var(--faint);line-height:1.55;padding:4px 0;
+  }
+  .meta-none b{color:var(--warn)}
+
+  .bar{
+    height:3px;background:var(--panel-2);border-radius:2px;
+    overflow:hidden;margin-top:10px;display:none;
+  }
+  .bar.on{display:block}
+  .bar i{display:block;height:100%;background:var(--neon);width:0;transition:width .2s}
+  .status{
+    font-family:var(--mono);font-size:11px;color:var(--dim);
+    margin-top:8px;min-height:16px;
+  }
