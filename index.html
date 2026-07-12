@@ -249,6 +249,33 @@
           <p class="note">Más alto = trazados más suaves y ligeros, pero menos fieles al original.</p>
         </div>
 
+        <div class="field">
+          <label for="svgBlur">Suavizado previo</label>
+          <div class="row">
+            <input type="range" id="svgBlur" min="0" max="5" step="1" value="1">
+            <span class="val" id="svgBlurVal">1</span>
+          </div>
+          <p class="note">Desenfoca la imagen ANTES de trazar. Elimina el ruido que ensucia el resultado. Súbelo con fotos, bájalo a 0 con logos limpios.</p>
+        </div>
+
+        <div class="field">
+          <label for="svgOmit">Eliminar motas</label>
+          <div class="row">
+            <input type="range" id="svgOmit" min="0" max="40" step="1" value="12">
+            <span class="val" id="svgOmitVal">12</span>
+          </div>
+          <p class="note">Descarta las manchas más pequeñas que este umbral. Sube si ves "confeti" de puntos sueltos.</p>
+        </div>
+
+        <div class="field">
+          <label for="svgRes">Resolución del trazado</label>
+          <div class="row">
+            <input type="range" id="svgRes" min="20" max="100" step="5" value="60">
+            <span class="val" id="svgResVal">60%</span>
+          </div>
+          <p class="note">Traza sobre una versión reducida y reescala el resultado: menos ruido, más limpio y mucho más rápido. El SVG conserva el tamaño original.</p>
+        </div>
+
         <button class="btn-sm" id="btnSvgPreview" style="width:100%">Previsualizar vectorizado</button>
         <p class="note" id="svgInfo"></p>
       </div>
