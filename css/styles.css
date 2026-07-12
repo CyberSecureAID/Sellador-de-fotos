@@ -412,8 +412,11 @@ select.fmt-select{
   padding:16px;
   background:repeating-conic-gradient(#1a211d 0% 25%, #141a17 0% 50%) 50%/18px 18px;
 }
-/* El SVG lleva viewBox, así que aquí se escala entero sin recortarse. */
+/* El SVG conserva width/height (tamaño intrínseco) y lleva viewBox.
+   max-width/max-height lo encajan entero, sin recortar y sin colapsar. */
 .vec-view svg{
-  max-width:100%;max-height:100%;
-  width:auto;height:auto;
+  max-width:100%;
+  max-height:100%;
+  height:auto;
+  display:block;
 }
