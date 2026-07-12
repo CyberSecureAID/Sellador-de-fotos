@@ -305,7 +305,10 @@ function refreshHeader(){
     : 'Sin fotos';
   $('btnExport').disabled = !n;
   const fx = $('fmt') ? $('fmt').value.toUpperCase().replace('JPEG','JPG') : '';
-  $('btnExport').textContent = n ? `Exportar ${n} · ${fx}` : 'Exportar todas';
+  const zip = ($('asZip') && $('asZip').checked) || n > 1;
+  $('btnExport').textContent = n
+    ? `Exportar ${n} · ${fx}${zip ? ' · ZIP' : ''}`
+    : 'Exportar todas';
 
   $('batchBar').style.display = n ? 'block' : 'none';
   if (n) {
@@ -319,7 +322,6 @@ function refreshHeader(){
 ═══════════════════════════════════════════════════════════ */
 async function select(i){
   if (cropMode) exitCrop();
-  if (typeof vectorMode !== 'undefined' && vectorMode) exitVector();
   const keep = $('keepView').checked && cv && zoom > fitZoom * 1.05;
   const prevZoom = zoom;
 
@@ -798,69 +800,7 @@ cropUI.addEventListener('pointermove', e => {
   cropUI.addEventListener(ev, () => { cDrag = null; })
 );
 
-/* ═══════════════════════════════════════════════════════════
-   MODO VECTORIZADO — vista en vivo dentro del área de trabajo
-   ───────────────────────────────────────────────────────────
-   Antes solo se podía ver el resultado exportando el archivo y
-   abriéndolo fuera. El área de trabajo es para TRABAJAR: aquí se
-   muestra el SVG real, con su recuento de trazados y peso, para
-   ajustar colores y suavizado hasta dar con el resultado.
-═══════════════════════════════════════════════════════════ */
-let vectorMode = false;
-
-function exitVector(){
-  vectorMode = false;
-  $('zVector').style.color = '';
-  $('zVector').textContent = 'Vectorizar';
-  if (current >= 0) draw();
-}
-
-function enterVector(){
-  if (current < 0) return;
-  if (typeof ImageTracer === 'undefined') {
-    statusEl.textContent = 'La librería de vectorización no cargó (revisa tu conexión e inténtalo de nuevo).';
-    return;
-  }
-  if (cropMode) exitCrop();
-
-  vectorMode = true;
-  $('zVector').style.color = 'var(--neon)';
-  $('zVector').textContent = 'Vectorizando…';
-  statusEl.textContent = 'Trazando… (puede tardar unos segundos)';
-
-  // setTimeout: deja pintar el aviso antes de bloquear con el trazado
-  setTimeout(() => {
-    try {
-      const t0 = performance.now();
-      const svg = vectorize(photos[current]);
-      const ms  = Math.round(performance.now() - t0);
-      const kb  = (new Blob([svg]).size / 1024).toFixed(0);
-      const np  = (svg.match(/<path/g) || []).length;
-
-      stage.innerHTML = '';
-      const box = document.createElement('div');
-      box.className = 'vec-view';
-      box.innerHTML = svg;
-      /* NO se quitan width/height: son el tamaño intrínseco del SVG.
-         Sin ellos (y con width:auto en CSS) el elemento COLAPSA A CERO
-         dentro de un contenedor flex — la vista salía en blanco.
-         Con los atributos + viewBox, el CSS (max-width/max-height) lo
-         escala entero y sin recortes. */
-      stage.appendChild(box);
-      stage.appendChild(cropUI);
-
-      $('zVector').textContent = 'Vectorizado';
-      statusEl.textContent = `${np} trazados · ${kb} KB · ${ms} ms — ajusta colores y suavizado y vuelve a pulsar.`;
-    } catch (e) {
-      statusEl.textContent = 'Error al vectorizar: ' + e.message;
-      exitVector();
-    }
-  }, 30);
-}
-
-$('zVector').onclick = () => vectorMode ? exitVector() : enterVector();
-
-$('zCrop').onclick   = () => { if (vectorMode) exitVector(); cropMode ? exitCrop() : enterCrop(); };
+$('zCrop').onclick   = () => cropMode ? exitCrop() : enterCrop();
 $('cropCancel').onclick = exitCrop;
 
 $('cropReset').onclick = () => {
@@ -984,160 +924,9 @@ const FORMATS = {
   png:  { ext:'png',  mime:'image/png',  quality:false, alpha:true  },
   webp: { ext:'webp', mime:'image/webp', quality:true,  alpha:true  },
   avif: { ext:'avif', mime:'image/avif', quality:true,  alpha:true  },
-  pdf:  { ext:'pdf',  mime:'application/pdf', quality:true, alpha:false },
-  /* SVG: vectorización REAL con ImageTracer.js (dominio público).
-     No es el raster metido en un envoltorio: son paths de Bézier
-     de verdad, escalables al infinito. */
-  svg:  { ext:'svg',  mime:'image/svg+xml', quality:false, alpha:true, vector:true }
+  pdf:  { ext:'pdf',  mime:'application/pdf', quality:true, alpha:false }
 };
 
-/* ═══════════════════════════════════════════════════════════
-   VECTORIZACIÓN (raster → SVG con trazados reales)
-   ───────────────────────────────────────────────────────────
-   ImageTracer convierte regiones de píxeles en curvas de Bézier.
-   Funciona bien con logos e iconos (pocos colores, bordes limpios);
-   con fotos produce archivos enormes y de aspecto sucio — por eso
-   la interfaz avisa y ofrece controles de color y simplificación.
-═══════════════════════════════════════════════════════════ */
-function tracerOptions(traceScale){
-  const preset = $('svgPreset').value;
-  const base = (typeof ImageTracer !== 'undefined' && ImageTracer.optionpresets &&
-                ImageTracer.optionpresets[preset])
-             ? { ...ImageTracer.optionpresets[preset] }
-             : {};
-  return {
-    ...base,
-    numberofcolors:  +$('svgColors').value,          // paleta
-    colorquantcycles: 5,                             // más ciclos = mejor paleta
-    ltres: +$('svgSmooth').value / 10,               // tolerancia de recta
-    qtres: +$('svgSmooth').value / 10,               // tolerancia de curva
-    pathomit: +$('svgOmit').value,                   // descarta motas pequeñas
-    blurradius: +$('svgBlur').value,                 // suaviza el ruido ANTES de trazar
-    blurdelta: 20,
-    rightangleenhance: true,                         // esquinas más limpias
-    linefilter: true,
-    strokewidth: 0,
-    // Se traza a resolución reducida (menos ruido) y se reescala el
-    // resultado: el SVG sale al tamaño original, pero mucho más limpio.
-    scale: 1 / traceScale
-  };
-}
-
-/* Ajusta cada píxel al color dominante más cercano (k-means ligero) y
-   vuelve binario el canal alfa. Es lo que elimina el halo del
-   anti-aliasing, que es lo que rompe los bordes al vectorizar. */
-function snapColors(imgd, k){
-  const d = imgd.data, n = d.length / 4;
-
-  // Alfa binario: fuera los bordes semitransparentes
-  for (let i = 0; i < n; i++) d[i*4+3] = d[i*4+3] < 128 ? 0 : 255;
-
-  // Semillas iniciales: muestreo uniforme de píxeles opacos
-  const cent = [];
-  for (let i = 0; i < k; i++) {
-    const j = Math.floor(i * n / k) * 4;
-    cent.push([d[j], d[j+1], d[j+2]]);
-  }
-
-  const idx = new Uint8Array(n);
-  for (let iter = 0; iter < 6; iter++) {
-    // Asignar cada píxel a su centro más cercano
-    for (let i = 0; i < n; i++) {
-      const o = i*4;
-      if (d[o+3] === 0) { idx[i] = 255; continue; }   // transparente
-      let best = 0, bd = Infinity;
-      for (let c = 0; c < k; c++) {
-        const dr = d[o]   - cent[c][0];
-        const dg = d[o+1] - cent[c][1];
-        const db = d[o+2] - cent[c][2];
-        const dist = dr*dr + dg*dg + db*db;
-        if (dist < bd) { bd = dist; best = c; }
-      }
-      idx[i] = best;
-    }
-    // Recalcular los centros
-    const sum = Array.from({length:k}, () => [0,0,0,0]);
-    for (let i = 0; i < n; i++) {
-      const c = idx[i];
-      if (c === 255) continue;
-      const o = i*4;
-      sum[c][0] += d[o]; sum[c][1] += d[o+1]; sum[c][2] += d[o+2]; sum[c][3]++;
-    }
-    for (let c = 0; c < k; c++) {
-      if (sum[c][3]) {
-        cent[c][0] = Math.round(sum[c][0] / sum[c][3]);
-        cent[c][1] = Math.round(sum[c][1] / sum[c][3]);
-        cent[c][2] = Math.round(sum[c][2] / sum[c][3]);
-      }
-    }
-  }
-
-  // Pintar cada píxel con el color exacto de su centro
-  for (let i = 0; i < n; i++) {
-    const c = idx[i];
-    if (c === 255) continue;
-    const o = i*4;
-    d[o] = cent[c][0]; d[o+1] = cent[c][1]; d[o+2] = cent[c][2];
-  }
-  return imgd;
-}
-
-/* Devuelve el SVG (texto) de una foto ya sellada y recortada.
-
-   DOS CORRECCIONES IMPORTANTES:
-   1) ImageTracer emite el SVG con width/height pero SIN viewBox. Sin
-      viewBox, el SVG no escala: se RECORTA. Aquí se le inyecta.
-   2) Trazar a resolución completa sobre una foto genera muchísimo ruido.
-      Se traza sobre una versión reducida (más limpia y más rápida) y se
-      reescala la salida, así el SVG conserva el tamaño original.
-*/
-function vectorize(p){
-  if (typeof ImageTracer === 'undefined') {
-    throw new Error('La librería de vectorización no se cargó. Revisa tu conexión.');
-  }
-
-  const full = document.createElement('canvas');
-  renderTo(full, p);                         // incluye sello y recorte
-
-  const ts = +$('svgRes').value / 100;       // 0.25 … 1.00
-  const w = Math.max(1, Math.round(full.width  * ts));
-  const h = Math.max(1, Math.round(full.height * ts));
-
-  const small = document.createElement('canvas');
-  small.width = w; small.height = h;
-  const sg = small.getContext('2d');
-  sg.imageSmoothingEnabled = true;
-  sg.imageSmoothingQuality = 'high';
-  sg.drawImage(full, 0, 0, w, h);
-
-  let imgd = sg.getImageData(0, 0, w, h);
-
-  /* LIMPIEZA DE BORDES (anti-aliasing) — la clave para que un logo
-     salga con bordes limpios.
-     Los bordes suavizados de un PNG/JPG no son duros: tienen píxeles
-     intermedios. El trazador no sabe que eso es SUAVIZADO: cree que
-     son colores nuevos y los convierte en franjas finas y dentadas.
-     Aquí se "endurecen" los colores antes de trazar: cada píxel se
-     ajusta al color dominante más cercano, y el canal alfa se vuelve
-     binario. Resultado: bordes nítidos en vez de rotos. */
-  if ($('svgClean').checked) {
-    imgd = snapColors(imgd, +$('svgColors').value);
-  }
-
-  let svg = ImageTracer.imagedataToSVG(imgd, tracerOptions(ts));
-
-  // Inyectar viewBox si falta (evita el recorte y permite escalar)
-  const mw = /width="([\d.]+)"/.exec(svg);
-  const mh = /height="([\d.]+)"/.exec(svg);
-  if (mw && mh && !/viewBox=/.test(svg)) {
-    svg = svg.replace('<svg ',
-      `<svg viewBox="0 0 ${mw[1]} ${mh[1]}" preserveAspectRatio="xMidYMid meet" `);
-  }
-  return svg;
-}
-
-/* Comprueba si el navegador sabe CODIFICAR un formato (no todos los
-   soportan AVIF/WebP al exportar). Devuelve true/false sin lanzar. */
 async function canEncode(mime){
   try {
     const c = document.createElement('canvas'); c.width = c.height = 2;
@@ -1188,14 +977,7 @@ $('btnExport').onclick = async () => {
   const fmtKey = $('fmt').value;
   const F = FORMATS[fmtKey];
 
-  // SVG no pasa por canvas.toBlob: se comprueba que la librería esté cargada
-  if (fmtKey === 'svg') {
-    if (typeof ImageTracer === 'undefined') {
-      alert('La librería de vectorización no se cargó.\n' +
-            'Necesitas conexión a internet la primera vez (se carga desde un CDN).');
-      return;
-    }
-  } else if (!(await canEncode((fmtKey === 'pdf') ? 'image/jpeg' : F.mime))) {
+  if (!(await canEncode((fmtKey === 'pdf') ? 'image/jpeg' : F.mime))) {
     alert(`Tu navegador no puede exportar en ${F.ext.toUpperCase()}.\n` +
           `Prueba con Chrome o Edge actualizados, o elige otro formato (JPG y PNG funcionan en todos).`);
     return;
@@ -1221,7 +1003,7 @@ $('btnExport').onclick = async () => {
 
     /* JPG y PDF no tienen transparencia: se rellena el fondo de blanco
        para que las zonas transparentes no salgan negras. */
-    if (!F.alpha && fmtKey !== 'svg') {
+    if (!F.alpha) {
       const flat = document.createElement('canvas');
       flat.width = c.width; flat.height = c.height;
       const fg = flat.getContext('2d');
@@ -1233,11 +1015,7 @@ $('btnExport').onclick = async () => {
     }
 
     let data, ext = F.ext;
-    if (fmtKey === 'svg') {
-      // Vectorización real: el resultado es texto SVG, no píxeles
-      const svg = vectorize(p);
-      data = new TextEncoder().encode(svg);
-    } else if (fmtKey === 'pdf') {
+    if (fmtKey === 'pdf') {
       const jpg = await new Promise(r => c.toBlob(r, 'image/jpeg', q));
       data = makePdf(new Uint8Array(await jpg.arrayBuffer()), c.width, c.height);
     } else {
@@ -1268,24 +1046,30 @@ $('btnExport').onclick = async () => {
 
   const a = document.createElement('a');
 
-  if (entries.length === 1) {
-    // Una sola imagen: se descarga directa, sin ZIP
+  /* La casilla "Comprimir en .zip" manda: si está marcada, TODO va en un
+     .zip — aunque sea una sola imagen. Si está desmarcada y hay una sola
+     foto, se descarga suelta; si hay varias, se agrupan igualmente (el
+     navegador no puede lanzar 30 descargas sueltas de forma fiable). */
+  const wantZip = $('asZip').checked || entries.length > 1;
+
+  if (wantZip) {
+    statusEl.textContent = 'Comprimiendo…';
+    const zip = makeZip(entries);
+    a.href = URL.createObjectURL(zip);
+    a.download = `${base}.zip`;
+  } else {
     statusEl.textContent = 'Descargando…';
     const blob = new Blob([entries[0].data], { type: F.mime });
     a.href = URL.createObjectURL(blob);
     a.download = `${base}.${F.ext}`;
-  } else {
-    // Varias: se agrupan en un ZIP
-    statusEl.textContent = 'Empaquetando…';
-    const zip = makeZip(entries);
-    a.href = URL.createObjectURL(zip);
-    a.download = `${base}.zip`;
   }
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 
   exported = true;
-  statusEl.textContent = `Listo: ${entries.length} archivo(s) en ${F.ext.toUpperCase()}.`;
+  statusEl.textContent = wantZip
+    ? `Listo: ${entries.length} archivo(s) en ${F.ext.toUpperCase()}, dentro de ${base}.zip`
+    : `Listo: ${base}.${F.ext}`;
 
   } catch (err) {
     /* Cualquier fallo (vectorización, memoria, formato…) se muestra en vez
@@ -1325,114 +1109,8 @@ COLORS.forEach(([hex, name]) => {
 });
 
 ['font','weight'].forEach(id => $(id).onchange = () => draw(true));
-$('fmt').onchange = () => {
-  refreshHeader();
-  $('svgPanel').style.display = ($('fmt').value === 'svg') ? 'block' : 'none';
-};
-
-/* ─── PRESETS POR TIPO DE IMAGEN ───
-   Un logo limpio necesita EXACTAMENTE LO CONTRARIO que una foto:
-   sin desenfoque, a resolución completa y con pocos colores. Los
-   valores por defecto anteriores (pensados para fotos) destrozaban
-   los bordes de los logos. Estos presets lo resuelven de un clic. */
-const SVG_KINDS = {
-  logo:     { preset:'default',     colors:4,  smooth:5,  blur:0, omit:4,  res:100 },
-  line:     { preset:'sharp',       colors:2,  smooth:3,  blur:0, omit:2,  res:100 },
-  gradient: { preset:'posterized2', colors:10, smooth:8,  blur:1, omit:8,  res:85  },
-  photo:    { preset:'posterized2', colors:6,  smooth:12, blur:3, omit:24, res:45  }
-};
-
-function applyKind(){
-  const k = SVG_KINDS[$('svgKind').value];
-  if (!k) return;                       // 'manual' → no toca nada
-  $('svgPreset').value = k.preset;
-  $('svgColors').value = k.colors;  $('svgColorsVal').textContent = k.colors;
-  $('svgSmooth').value = k.smooth;  $('svgSmoothVal').textContent = (k.smooth/10).toFixed(1);
-  $('svgBlur').value   = k.blur;    $('svgBlurVal').textContent   = k.blur;
-  $('svgOmit').value   = k.omit;    $('svgOmitVal').textContent   = k.omit;
-  $('svgRes').value    = k.res;     $('svgResVal').textContent    = k.res + '%';
-}
-$('svgKind').onchange = applyKind;
-
-/* Si tocas un deslizador a mano, el tipo pasa a "Manual" */
-['svgColors','svgSmooth','svgBlur','svgOmit','svgRes'].forEach(id =>
-  $(id).addEventListener('change', () => { $('svgKind').value = 'manual'; })
-);
-
-/* Los deslizadores del panel SVG */
-$('svgColors').oninput = () => { $('svgColorsVal').textContent = $('svgColors').value; };
-$('svgSmooth').oninput = () => { $('svgSmoothVal').textContent = (+$('svgSmooth').value / 10).toFixed(1); };
-$('svgBlur').oninput   = () => { $('svgBlurVal').textContent   = $('svgBlur').value; };
-$('svgOmit').oninput   = () => { $('svgOmitVal').textContent   = $('svgOmit').value; };
-$('svgRes').oninput    = () => { $('svgResVal').textContent    = $('svgRes').value + '%'; };
-
-/* Vista previa del vectorizado: sustituye el lienzo por el SVG real,
-   para que veas exactamente lo que vas a exportar antes de hacerlo. */
-$('btnSvgPreview').onclick = () => {
-  if (current < 0) return;
-  const p = photos[current];
-  if (typeof ImageTracer === 'undefined') {
-    $('svgInfo').textContent = 'La librería no se cargó (revisa tu conexión).';
-    return;
-  }
-  const btn = $('btnSvgPreview');
-  btn.disabled = true;
-  btn.textContent = 'Vectorizando…';
-  $('svgInfo').textContent = '';
-
-  // setTimeout: deja que el navegador pinte el "Vectorizando…" antes
-  // de bloquearse con el trazado (que es síncrono y puede tardar).
-  setTimeout(() => {
-    try {
-      const t0 = performance.now();
-      const svg = vectorize(p);
-      const ms = Math.round(performance.now() - t0);
-      const kb = (new Blob([svg]).size / 1024).toFixed(0);
-      const paths = (svg.match(/<path/g) || []).length;
-
-      stage.innerHTML = '';
-      const box = document.createElement('div');
-      box.style.cssText = 'width:100%;height:100%;display:grid;place-items:center;overflow:auto;padding:12px';
-      box.innerHTML = svg;
-      /* Igual que arriba: se conservan width/height + viewBox. */
-      stage.appendChild(box);
-      stage.appendChild(cropUI);
-
-      $('svgInfo').textContent = `${paths} trazados · ${kb} KB · ${ms} ms. Pulsa una foto de la lista para volver.`;
-    } catch (e) {
-      $('svgInfo').textContent = 'Error al vectorizar: ' + e.message;
-    }
-    btn.disabled = false;
-    btn.textContent = 'Previsualizar vectorizado';
-  }, 30);
-};
-
-/* El lienzo dibuja con la fuente que esté YA cargada. Si Roboto llega
-   tarde, el primer sello saldría con la de reserva — por eso, en cuanto
-   las fuentes están listas, se vuelve a dibujar. */
-if (document.fonts && document.fonts.ready) {
-  document.fonts.ready.then(() => { if (current >= 0) draw(true); });
-}
-
-/* ─── Estado de la librería de vectorización ───
-   Si no cargó (sin internet, CDN caído, bloqueador), se avisa AQUÍ y se
-   deshabilita la opción SVG. Antes fallaba en silencio al exportar y
-   parecía que el botón no hacía nada. */
-window.addEventListener('load', () => {
-  const opt = [...$('fmt').options].find(o => o.value === 'svg');
-  if (typeof ImageTracer === 'undefined') {
-    if (opt) {
-      opt.disabled = true;
-      opt.textContent = 'SVG — no disponible (sin conexión)';
-    }
-    $('zVector').disabled = true;
-    $('zVector').title = 'La librería de vectorización no cargó';
-    statusEl.textContent = 'Vectorización no disponible: la librería no cargó. Necesitas internet la primera vez.';
-    setTimeout(() => { if (statusEl.textContent.startsWith('Vectorización no')) statusEl.textContent = ''; }, 6000);
-  }
-});
-
-applyKind();      // arranca con los ajustes de "Logo / icono plano"
+$('fmt').onchange   = () => refreshHeader();
+$('asZip').onchange = () => refreshHeader();
 
 /* Pie por defecto (edítalo a tu gusto) */
 $('extra').value = '';
