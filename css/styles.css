@@ -420,3 +420,41 @@ select.fmt-select{
   height:auto;
   display:block;
 }
+
+/* ═══════════════════════════════════════════════
+   AÑADIDOS FINALES
+═══════════════════════════════════════════════ */
+
+/* Crédito del desarrollador en el header */
+.credit{
+  font-family:var(--mono);font-size:10px;color:var(--faint);
+  white-space:nowrap;margin-left:4px;
+}
+.credit b{color:var(--neon);font-weight:600}
+
+/* Botones de recorte, ahora en la barra (ya no tapan la foto) */
+.stage-head .crop-actions{
+  display:flex;gap:6px;align-items:center;
+}
+
+/* Control de redimensionado — ocupa el sitio del antiguo "Vista previa" */
+.resize-ctl{
+  display:flex;align-items:center;gap:8px;margin-left:auto;
+}
+.resize-ctl label{
+  font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--faint);margin:0;
+}
+.resize-ctl input[type=range]{width:120px;accent-color:var(--neon)}
+.resize-val{
+  font-family:var(--mono);font-size:11px;color:var(--dim);
+  min-width:96px;text-align:right;
+}
+
+/* Imagen que representa la sección de edición (sustituye al aviso naranja) */
+.section-photo{
+  height:120px;border-radius:12px;margin-bottom:16px;
+  background:url('panel-bg.webp') center/cover no-repeat, var(--panel-2);
+  border:1px solid var(--line);
+  box-shadow:inset 0 -40px 50px -30px rgba(0,0,0,.8);
+}
