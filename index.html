@@ -327,7 +327,13 @@
   <h1>Sellador de fotos</h1>
   <span class="count" id="hdrCount">Sin fotos</span>
   <div class="spacer"></div>
-  <button id="btnExport" class="btn-go" disabled>Exportar todas (.zip)</button>
+  <input type="text" id="zipName" value="fotos-selladas"
+         title="Nombre del archivo .zip" spellcheck="false"
+         style="width:170px;background:var(--panel);color:var(--tx);
+                border:1px solid var(--line);border-radius:6px;
+                padding:8px 11px;font-family:var(--mono);font-size:12px">
+  <span style="font-family:var(--mono);font-size:12px;color:var(--faint)">.zip</span>
+  <button id="btnExport" class="btn-go" disabled>Exportar todas</button>
 </header>
 
 <main>
@@ -340,6 +346,15 @@
       <small>o haz clic para elegirlas · JPG con datos EXIF</small>
     </div>
     <input type="file" id="file" accept="image/jpeg,image/jpg" multiple hidden>
+
+    <div id="batchBar" style="display:none;margin-top:14px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn-sm" id="btnAllExif" title="Rellena la 1ª línea de cada foto con su fecha real">Fecha EXIF a todas</button>
+        <button class="btn-sm" id="btnClearBad" title="Quita las fotos que no tienen fecha EXIF">Quitar sin fecha</button>
+        <button class="btn-sm" id="btnClearAll" title="Vacía la lista completa">Vaciar todo</button>
+      </div>
+      <div id="miniStat" style="font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:8px"></div>
+    </div>
 
     <div class="list" id="list"></div>
   </section>
@@ -722,6 +737,7 @@ async function addFiles(files){
   if (current < 0 && photos.length) select(0);
   statusEl.textContent = '';
   refreshHeader();
+  exported = false;
 }
 
 /* Líneas por defecto: fecha real + pie fijo */
@@ -804,10 +820,18 @@ function removePhoto(i){
 function refreshHeader(){
   const n = photos.length;
   const bad = photos.filter(p => !p.exifDate).length;
+  const crop = photos.filter(p => p.crop).length;
   $('hdrCount').textContent = n
     ? `${n} foto${n > 1 ? 's' : ''}${bad ? ` · ${bad} sin fecha` : ''}`
     : 'Sin fotos';
   $('btnExport').disabled = !n;
+  $('btnExport').textContent = n ? `Exportar ${n}` : 'Exportar todas';
+
+  $('batchBar').style.display = n ? 'block' : 'none';
+  if (n) {
+    $('miniStat').textContent =
+      `${n - bad} con fecha · ${bad} sin fecha${crop ? ` · ${crop} recortada${crop>1?'s':''}` : ''}`;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -912,6 +936,51 @@ $('rename').oninput = () => {
   if (current < 0) return;
   photos[current].rename = $('rename').value;
   renderList();
+};
+
+/* ─── Acciones por lote ─── */
+
+// Rellena la 1ª línea (fecha) de TODAS con su fecha EXIF real
+$('btnAllExif').onclick = () => {
+  let ok = 0;
+  photos.forEach(p => {
+    if (p.exifDate) {
+      const rest = p.lines.slice(1);
+      p.lines = [stampDate(p.exifDate), ...rest];
+      ok++;
+    }
+  });
+  if (current >= 0) $('lines').value = photos[current].lines.join('\n');
+  draw(true);
+  statusEl.textContent = `Fecha EXIF aplicada a ${ok} foto(s).`;
+  setTimeout(() => statusEl.textContent = '', 2200);
+};
+
+// Quita de la lista las que no tienen fecha EXIF (con confirmación)
+$('btnClearBad').onclick = () => {
+  const bad = photos.filter(p => !p.exifDate).length;
+  if (!bad) { statusEl.textContent = 'Todas tienen fecha.'; setTimeout(()=>statusEl.textContent='',1800); return; }
+  if (!confirm(`Se quitarán ${bad} foto(s) sin fecha EXIF de la lista.\nTus archivos originales no se tocan. ¿Continuar?`)) return;
+  for (let i = photos.length - 1; i >= 0; i--) if (!photos[i].exifDate) {
+    URL.revokeObjectURL(photos[i].url);
+    photos.splice(i, 1);
+  }
+  current = photos.length ? Math.min(current, photos.length - 1) : -1;
+  renderList(); refreshHeader();
+  if (current >= 0) select(current); else location.reload();
+};
+
+// Vacía toda la lista (con confirmación)
+$('btnClearAll').onclick = () => {
+  if (!photos.length) return;
+  if (!confirm(`Se vaciará la lista (${photos.length} fotos).\nTus archivos originales no se tocan. ¿Continuar?`)) return;
+  photos.forEach(p => URL.revokeObjectURL(p.url));
+  photos.length = 0; current = -1; cv = null;
+  renderList(); refreshHeader();
+  stage.innerHTML = '<div class="empty">Sin fotos cargadas.</div>';
+  stage.appendChild(zoomBar); stage.appendChild(hintEl); stage.appendChild(cropUI);
+  zoomBar.style.display = 'none'; hintEl.style.display = 'none';
+  $('editor').style.display = 'none'; $('noSel').style.display = 'block';
 };
 
 $('btnDelete').onclick = () => { if (current >= 0) removePhoto(current); };
@@ -1158,6 +1227,36 @@ function draw(keepView){
 }
 
 window.addEventListener('resize', () => { if (cv) fitToStage(); });
+
+/* ─── Atajos de teclado (agilizan la revisión por lotes) ───
+   ↑/↓  → foto anterior/siguiente     Supr → eliminar la actual
+   Ctrl/⌘+S → exportar
+   No actúan si estás escribiendo en un campo de texto. */
+document.addEventListener('keydown', e => {
+  const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+  if ((e.key === 's') && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    if (!$('btnExport').disabled) $('btnExport').click();
+    return;
+  }
+  if (typing || current < 0) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+    e.preventDefault();
+    if (current < photos.length - 1) select(current + 1);
+  } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (current > 0) select(current - 1);
+  } else if (e.key === 'Delete') {
+    removePhoto(current);
+  }
+});
+
+/* Aviso al cerrar si hay fotos cargadas sin exportar (evita perder
+   el trabajo de una sesión larga por un cierre accidental). */
+let exported = false;
+window.addEventListener('beforeunload', e => {
+  if (photos.length && !exported) { e.preventDefault(); e.returnValue = ''; }
+});
 
 /* ═══════════════════════════════════════════════════════════
    7c. RECORTE (estilo Photoshop)
@@ -1406,10 +1505,13 @@ $('btnExport').onclick = async () => {
   const zip = makeZip(entries);
   const a = document.createElement('a');
   a.href = URL.createObjectURL(zip);
-  a.download = 'fotos-selladas.zip';
+  const zn = ($('zipName').value.trim() || 'fotos-selladas')
+             .replace(/[\\/:*?"<>|]/g, '-').replace(/\.zip$/i, '');
+  a.download = zn + '.zip';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 
+  exported = true;
   statusEl.textContent = `Listo: ${entries.length} foto(s) exportadas.`;
   $('bar').classList.remove('on');
   $('barFill').style.width = '0';
