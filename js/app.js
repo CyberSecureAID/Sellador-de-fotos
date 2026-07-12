@@ -304,7 +304,8 @@ function refreshHeader(){
     ? `${n} foto${n > 1 ? 's' : ''}${bad ? ` · ${bad} sin fecha` : ''}`
     : 'Sin fotos';
   $('btnExport').disabled = !n;
-  $('btnExport').textContent = n ? `Exportar ${n}` : 'Exportar todas';
+  const fx = $('fmt') ? $('fmt').value.toUpperCase().replace('JPEG','JPG') : '';
+  $('btnExport').textContent = n ? `Exportar ${n} · ${fx}` : 'Exportar todas';
 
   $('batchBar').style.display = n ? 'block' : 'none';
   if (n) {
@@ -906,8 +907,83 @@ function makeZip(entries){
   return new Blob([...chunks, ...central, new Uint8Array(end.buffer)], { type:'application/zip' });
 }
 
+/* ═══════════════════════════════════════════════════════════
+   EXPORTACIÓN MULTIFORMATO
+   ───────────────────────────────────────────────────────────
+   Cada formato tiene su tipo MIME, extensión y si admite calidad o
+   transparencia. Solo se ofrecen formatos que el NAVEGADOR genera de
+   verdad (PNG, JPG, WebP, AVIF, PDF). No hay SVG/AI/EPS: convertir un
+   raster a vector real exige un programa de escritorio, y prometerlo
+   sería engañoso.
+═══════════════════════════════════════════════════════════ */
+const FORMATS = {
+  jpeg: { ext:'jpg',  mime:'image/jpeg', quality:true,  alpha:false },
+  png:  { ext:'png',  mime:'image/png',  quality:false, alpha:true  },
+  webp: { ext:'webp', mime:'image/webp', quality:true,  alpha:true  },
+  avif: { ext:'avif', mime:'image/avif', quality:true,  alpha:true  },
+  pdf:  { ext:'pdf',  mime:'application/pdf', quality:true, alpha:false }
+};
+
+/* Comprueba si el navegador sabe CODIFICAR un formato (no todos los
+   soportan AVIF/WebP al exportar). Devuelve true/false sin lanzar. */
+async function canEncode(mime){
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 2;
+    const b = await new Promise(r => c.toBlob(r, mime, 0.8));
+    return !!b && b.type === mime;
+  } catch (e) { return false; }
+}
+
+/* PDF mínimo válido con una imagen JPEG incrustada a página completa.
+   Se escribe el PDF "a mano" (5 objetos): así no hace falta librería. */
+function makePdf(jpegBytes, w, h){
+  const enc = s => new TextEncoder().encode(s);
+  const parts = [];
+  const push = u8 => parts.push(u8);
+  let len = 0; const off = [];
+  const put = (str) => { const u = enc(str); off.push(len); len += u.length; push(u); };
+  const putRaw = (u8) => { len += u8.length; push(u8); };
+
+  // El tamaño de página sigue la proporción de la imagen (72 dpi → puntos)
+  const pw = 595.28, ph = pw * h / w;   // ancho A4, alto proporcional
+
+  const xref = [];
+  const track = () => xref.push(len);
+
+  put('%PDF-1.4\n');
+  track(); put('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+  track(); put('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n');
+  track(); put(`3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw.toFixed(2)} ${ph.toFixed(2)}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`);
+  track(); put(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`);
+  putRaw(jpegBytes); put('\nendstream\nendobj\n');
+  const content = `q\n${pw.toFixed(2)} 0 0 ${ph.toFixed(2)} 0 0 cm\n/Im0 Do\nQ\n`;
+  track(); put(`5 0 obj\n<< /Length ${content.length} >>\nstream\n${content}endstream\nendobj\n`);
+
+  const xrefPos = len;
+  let x = 'xref\n0 6\n0000000000 65535 f \n';
+  for (const o of xref) x += String(o).padStart(10,'0') + ' 00000 n \n';
+  put(x);
+  put(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF`);
+
+  const total = parts.reduce((s,u)=>s+u.length,0);
+  const out = new Uint8Array(total); let p = 0;
+  for (const u of parts){ out.set(u,p); p += u.length; }
+  return out;
+}
+
 $('btnExport').onclick = async () => {
   const btn = $('btnExport');
+  const fmtKey = $('fmt').value;
+  const F = FORMATS[fmtKey];
+
+  // Verificar que el navegador realmente puede codificar este formato
+  const encMime = (fmtKey === 'pdf') ? 'image/jpeg' : F.mime;
+  if (!(await canEncode(encMime))) {
+    alert(`Tu navegador no puede exportar en ${F.ext.toUpperCase()}.\n` +
+          `Prueba con Chrome o Edge actualizados, o elige otro formato (JPG y PNG funcionan en todos).`);
+    return;
+  }
+
   btn.disabled = true;
   $('bar').classList.add('on');
 
@@ -917,48 +993,76 @@ $('btnExport').onclick = async () => {
 
   for (let i = 0; i < photos.length; i++) {
     const p = photos[i];
-    statusEl.textContent = `Sellando ${i + 1} de ${photos.length}…`;
+    statusEl.textContent = `Exportando ${i + 1} de ${photos.length}… (${F.ext.toUpperCase()})`;
     $('barFill').style.width = ((i / photos.length) * 100) + '%';
 
     if (!p.bmp) p.bmp = await createImageBitmap(p.file);
     const c = document.createElement('canvas');
     renderTo(c, p);
 
-    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', q));
-    const buf  = new Uint8Array(await blob.arrayBuffer());
+    /* JPG y PDF no tienen transparencia: se rellena el fondo de blanco
+       para que las zonas transparentes no salgan negras. */
+    if (!F.alpha) {
+      const flat = document.createElement('canvas');
+      flat.width = c.width; flat.height = c.height;
+      const fg = flat.getContext('2d');
+      fg.fillStyle = '#FFFFFF';
+      fg.fillRect(0, 0, flat.width, flat.height);
+      fg.drawImage(c, 0, 0);
+      c.width = flat.width; c.height = flat.height;
+      c.getContext('2d').drawImage(flat, 0, 0);
+    }
 
-    /* Nombre de salida: el que tú escribiste, o el original si lo
-       dejaste en blanco. Se limpian los caracteres que no admiten los
-       sistemas de archivos, y se numera si hay repetidos, para que
-       ninguna foto sobrescriba a otra. */
+    let data, ext = F.ext;
+    if (fmtKey === 'pdf') {
+      const jpg = await new Promise(r => c.toBlob(r, 'image/jpeg', q));
+      data = makePdf(new Uint8Array(await jpg.arrayBuffer()), c.width, c.height);
+    } else {
+      const blob = await new Promise(r =>
+        c.toBlob(r, F.mime, F.quality ? q : undefined));
+      data = new Uint8Array(await blob.arrayBuffer());
+    }
+
+    // Nombre de salida (tuyo o el original), único, con la extensión del formato
     const custom = (p.rename || '').trim();
     const stem = custom
       ? custom.replace(/[\\/:*?"<>|]/g, '-').slice(0, 90)
-      : p.file.name.replace(/\.(jpe?g|png|webp)$/i, '') + '-sellada';
+      : p.file.name.replace(/\.(jpe?g|png|webp|avif)$/i, '') + '-sellada';
 
-    let name = stem + '.jpg';
+    let name = `${stem}.${ext}`;
     let n = 2;
-    while (used.has(name)) name = `${stem} (${n++}).jpg`;
+    while (used.has(name)) name = `${stem} (${n++}).${ext}`;
     used.add(name);
 
-    entries.push({ name, data: buf });
-    await new Promise(r => setTimeout(r));   // deja respirar a la interfaz
+    entries.push({ name, data });
+    await new Promise(r => setTimeout(r));
   }
 
   $('barFill').style.width = '100%';
-  statusEl.textContent = 'Empaquetando…';
 
-  const zip = makeZip(entries);
+  const base = ($('zipName').value.trim() || 'export')
+               .replace(/[\\/:*?"<>|]/g, '-').replace(/\.(zip|jpg|png|webp|avif|pdf)$/i, '');
+
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(zip);
-  const zn = ($('zipName').value.trim() || 'fotos-selladas')
-             .replace(/[\\/:*?"<>|]/g, '-').replace(/\.zip$/i, '');
-  a.download = zn + '.zip';
+
+  if (entries.length === 1) {
+    // Una sola imagen: se descarga directa, sin ZIP
+    statusEl.textContent = 'Descargando…';
+    const blob = new Blob([entries[0].data], { type: F.mime });
+    a.href = URL.createObjectURL(blob);
+    a.download = `${base}.${F.ext}`;
+  } else {
+    // Varias: se agrupan en un ZIP
+    statusEl.textContent = 'Empaquetando…';
+    const zip = makeZip(entries);
+    a.href = URL.createObjectURL(zip);
+    a.download = `${base}.zip`;
+  }
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 
   exported = true;
-  statusEl.textContent = `Listo: ${entries.length} foto(s) exportadas.`;
+  statusEl.textContent = `Listo: ${entries.length} archivo(s) en ${F.ext.toUpperCase()}.`;
   $('bar').classList.remove('on');
   $('barFill').style.width = '0';
   btn.disabled = false;
@@ -988,6 +1092,7 @@ COLORS.forEach(([hex, name]) => {
 });
 
 ['font','weight'].forEach(id => $(id).onchange = () => draw(true));
+$('fmt').onchange = () => refreshHeader();
 
 /* El lienzo dibuja con la fuente que esté YA cargada. Si Roboto llega
    tarde, el primer sello saldría con la de reserva — por eso, en cuanto
