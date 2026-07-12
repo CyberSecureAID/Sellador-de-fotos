@@ -339,11 +339,14 @@ async function select(i){
   $('rename').value = p.rename || '';
   showMeta(p);
 
-  // Menú de tamaño: refleja la config de esta foto
+  if (!p.bmp) p.bmp = await createImageBitmap(p.file);
+
+  // Menú de tamaño: refleja la config de esta foto.
+  // DEBE ir DESPUÉS de crear p.bmp: refreshSizeMenu → dimsOf() lee
+  // p.bmp.width, y si el bitmap aún no existe, lanza y deja select()
+  // a medias (la imagen no se llegaba a dibujar).
   $('sizeMenu').style.display = 'block';
   refreshSizeMenu(p);
-
-  if (!p.bmp) p.bmp = await createImageBitmap(p.file);
 
   if (keep) {
     /* Venías acercado al sello: la foto nueva se abre al MISMO zoom y
@@ -422,6 +425,7 @@ function showMeta(p){
    • 'scale' REDUCE las dimensiones en píxeles. La imagen se ve más pequeña.
 */
 function dimsOf(p){
+  if (!p || !p.bmp) return { w: 0, h: 0 };   // aún sin bitmap: sin romper
   const o = p.orientation, swap = o >= 5 && o <= 8;
   let w = swap ? p.bmp.height : p.bmp.width;
   let h = swap ? p.bmp.width  : p.bmp.height;
