@@ -458,6 +458,6 @@ select.fmt-select{
   aspect-ratio:1313/736;
   width:100%;
   border-radius:12px;margin-bottom:16px;
-  background:url('panel-bg.webp') center/contain no-repeat, #0A0F0C;
+  background:url('../panel-bg.webp') center/contain no-repeat, #0A0F0C;
   border:1px solid var(--line);
 }
