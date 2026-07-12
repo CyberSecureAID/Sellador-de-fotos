@@ -20,11 +20,17 @@
   <span class="count" id="hdrCount">Sin fotos</span>
   <div class="spacer"></div>
   <input type="text" id="zipName" value="fotos-selladas"
-         title="Nombre del archivo .zip" spellcheck="false"
-         style="width:170px;background:var(--panel);color:var(--tx);
-                border:1px solid var(--line);border-radius:6px;
-                padding:8px 11px;font-family:var(--mono);font-size:12px">
-  <span style="font-family:var(--mono);font-size:12px;color:var(--faint)">.zip</span>
+         title="Nombre del archivo .zip" spellcheck="false" class="zip-name">
+  <div class="fmt-wrap">
+    <label class="fmt-label" for="fmt">Formato</label>
+    <select id="fmt" class="fmt-select" title="Formato de exportación">
+      <option value="jpeg" selected>JPG · foto, ligero</option>
+      <option value="png">PNG · transparencia</option>
+      <option value="webp">WebP · web moderno</option>
+      <option value="avif">AVIF · máxima compresión</option>
+      <option value="pdf">PDF · imprimible</option>
+    </select>
+  </div>
   <button id="btnExport" class="btn-go" disabled>Exportar todas</button>
 </header>
 
