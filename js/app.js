@@ -841,14 +841,11 @@ function enterVector(){
       const box = document.createElement('div');
       box.className = 'vec-view';
       box.innerHTML = svg;
-      const el = box.querySelector('svg');
-      if (el) {
-        /* El viewBox ya viene inyectado en vectorize(). Al quitar
-           width/height y dejar que el CSS mande, el SVG se ESCALA
-           dentro del marco en vez de recortarse. */
-        el.removeAttribute('width');
-        el.removeAttribute('height');   // el CSS (.vec-view svg) lo escala entero
-      }
+      /* NO se quitan width/height: son el tamaño intrínseco del SVG.
+         Sin ellos (y con width:auto en CSS) el elemento COLAPSA A CERO
+         dentro de un contenedor flex — la vista salía en blanco.
+         Con los atributos + viewBox, el CSS (max-width/max-height) lo
+         escala entero y sin recortes. */
       stage.appendChild(box);
       stage.appendChild(cropUI);
 
@@ -1261,6 +1258,35 @@ $('fmt').onchange = () => {
   $('svgPanel').style.display = ($('fmt').value === 'svg') ? 'block' : 'none';
 };
 
+/* ─── PRESETS POR TIPO DE IMAGEN ───
+   Un logo limpio necesita EXACTAMENTE LO CONTRARIO que una foto:
+   sin desenfoque, a resolución completa y con pocos colores. Los
+   valores por defecto anteriores (pensados para fotos) destrozaban
+   los bordes de los logos. Estos presets lo resuelven de un clic. */
+const SVG_KINDS = {
+  logo:     { preset:'default',     colors:4,  smooth:5,  blur:0, omit:4,  res:100 },
+  line:     { preset:'sharp',       colors:2,  smooth:3,  blur:0, omit:2,  res:100 },
+  gradient: { preset:'posterized2', colors:10, smooth:8,  blur:1, omit:8,  res:85  },
+  photo:    { preset:'posterized2', colors:6,  smooth:12, blur:3, omit:24, res:45  }
+};
+
+function applyKind(){
+  const k = SVG_KINDS[$('svgKind').value];
+  if (!k) return;                       // 'manual' → no toca nada
+  $('svgPreset').value = k.preset;
+  $('svgColors').value = k.colors;  $('svgColorsVal').textContent = k.colors;
+  $('svgSmooth').value = k.smooth;  $('svgSmoothVal').textContent = (k.smooth/10).toFixed(1);
+  $('svgBlur').value   = k.blur;    $('svgBlurVal').textContent   = k.blur;
+  $('svgOmit').value   = k.omit;    $('svgOmitVal').textContent   = k.omit;
+  $('svgRes').value    = k.res;     $('svgResVal').textContent    = k.res + '%';
+}
+$('svgKind').onchange = applyKind;
+
+/* Si tocas un deslizador a mano, el tipo pasa a "Manual" */
+['svgColors','svgSmooth','svgBlur','svgOmit','svgRes'].forEach(id =>
+  $(id).addEventListener('change', () => { $('svgKind').value = 'manual'; })
+);
+
 /* Los deslizadores del panel SVG */
 $('svgColors').oninput = () => { $('svgColorsVal').textContent = $('svgColors').value; };
 $('svgSmooth').oninput = () => { $('svgSmoothVal').textContent = (+$('svgSmooth').value / 10).toFixed(1); };
@@ -1296,8 +1322,7 @@ $('btnSvgPreview').onclick = () => {
       const box = document.createElement('div');
       box.style.cssText = 'width:100%;height:100%;display:grid;place-items:center;overflow:auto;padding:12px';
       box.innerHTML = svg;
-      const el = box.querySelector('svg');
-      if (el) { el.removeAttribute('width'); el.removeAttribute('height'); el.style.width='100%'; el.style.height='100%'; }
+      /* Igual que arriba: se conservan width/height + viewBox. */
       stage.appendChild(box);
       stage.appendChild(cropUI);
 
@@ -1334,6 +1359,8 @@ window.addEventListener('load', () => {
     setTimeout(() => { if (statusEl.textContent.startsWith('Vectorización no')) statusEl.textContent = ''; }, 6000);
   }
 });
+
+applyKind();      // arranca con los ajustes de "Logo / icono plano"
 
 /* Pie por defecto (edítalo a tu gusto) */
 $('extra').value = '';
