@@ -46,7 +46,7 @@
      al texto de encima. */
   header::before{
     content:'';position:absolute;inset:0;z-index:-1;
-    background:url('header-bg.webp') center/cover no-repeat;
+    background:url('../header-bg.webp') center/cover no-repeat;
     filter:blur(6px) saturate(1.2) brightness(.5);
     transform:scale(1.15);   /* evita bordes claros al desenfocar */
   }
@@ -177,7 +177,7 @@
        para que la foto que edites siempre resalte por encima. */
     background:
       linear-gradient(rgba(11,15,13,.62), rgba(11,15,13,.72)),
-      url('stage-bg.webp') center/cover no-repeat, var(--panel);
+      url('../stage-bg.webp') center/cover no-repeat, var(--panel);
     border-radius:10px;border:1px solid var(--line);
     cursor:grab;touch-action:none;
   }
@@ -378,3 +378,29 @@
 }
 .fmt-select:hover{border-color:var(--faint)}
 .fmt-select:focus{outline:none;border-color:var(--neon)}
+
+
+/* ═══════════════════════════════════════════════
+   CORRECCIONES DEL HEADER
+   ───────────────────────────────────────────────
+   1) El input se estiraba: la regla `input[type=text]` lleva
+      width:100% y TIENE MÁS ESPECIFICIDAD que una clase suelta
+      (selector de atributo = peso de clase, + el elemento). Por eso
+      aquí se cualifica con `input.zip-name`, que sí la gana.
+   2) Los textos se partían en dos líneas al comprimirse: se fija
+      nowrap y flex-shrink:0 en los elementos que no deben encogerse.
+═══════════════════════════════════════════════ */
+header h1{white-space:nowrap;flex-shrink:0}
+header .count{white-space:nowrap;flex-shrink:0}
+header .btn-go{white-space:nowrap;flex-shrink:0}
+header .fmt-wrap{flex-shrink:0}
+
+input.zip-name{
+  flex:0 0 190px;
+  width:190px;
+}
+
+select.fmt-select{
+  width:auto;
+  min-width:190px;
+}
