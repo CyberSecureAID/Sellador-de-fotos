@@ -29,9 +29,12 @@
       <option value="webp">WebP — web</option>
       <option value="avif">AVIF — compacto</option>
       <option value="pdf">PDF — imprimible</option>
-      <option value="svg">SVG — vectorizado real</option>
     </select>
   </div>
+  <label class="check" style="white-space:nowrap;margin-right:4px" title="Agrupar todo en un solo archivo .zip">
+    <input type="checkbox" id="asZip" checked>
+    Comprimir en .zip
+  </label>
   <button id="btnExport" class="btn-go" disabled>Exportar todas</button>
 </header>
 
@@ -65,7 +68,6 @@
         <button id="zFit" title="Ajustar a la ventana">Ajustar</button>
         <button id="zStamp" title="Ver el sello al 100%">Sello</button>
         <button id="zCrop" title="Recortar la imagen">Recortar</button>
-        <button id="zVector" title="Ver la imagen vectorizada en el área de trabajo">Vectorizar</button>
       </div>
       <span class="stage-title" id="stageTitle">Vista previa</span>
     </div>
@@ -204,92 +206,6 @@
         <p class="note">95 es visualmente idéntico al original. 100 evita casi toda pérdida, pero pesa más.</p>
       </div>
 
-      <!-- ═══ AJUSTES DE VECTORIZACIÓN — solo al exportar en SVG ═══
-           La vectorización convierte los píxeles en trazados matemáticos
-           reales (paths de Bézier), escalables al infinito. Funciona muy
-           bien con logos e iconos (pocos colores, bordes limpios) y mal
-           con fotografías: por eso estos controles. -->
-      <div id="svgPanel" style="display:none">
-        <hr>
-        <h2>Vectorización (SVG)</h2>
-
-        <div class="alert" style="background:rgba(55,232,160,.08);border-color:rgba(55,232,160,.3);color:#9FE8C8">
-          Convierte los píxeles en <b>trazados vectoriales reales</b>, escalables sin pixelar.
-          Ideal para <b>logos e iconos</b>. Con fotografías el resultado es pobre y el archivo, enorme.
-        </div>
-
-        <div class="field">
-          <label for="svgKind">Tipo de imagen</label>
-          <select id="svgKind">
-            <option value="logo" selected>Logo / icono plano</option>
-            <option value="line">Dibujo de línea / firma</option>
-            <option value="gradient">Logo con degradados</option>
-            <option value="photo">Fotografía (efecto póster)</option>
-            <option value="manual">Manual (ajusto yo)</option>
-          </select>
-          <p class="note">Elige el tipo y los ajustes de abajo se configuran solos. Un logo necesita justo lo contrario que una foto.</p>
-        </div>
-
-        <input type="hidden" id="svgPreset" value="default">
-
-        <label class="check" style="margin-bottom:14px">
-          <input type="checkbox" id="svgClean" checked>
-          Limpiar bordes (quitar anti-aliasing)
-        </label>
-        <p class="note" style="margin-top:-8px;margin-bottom:14px">
-          Endurece los colores antes de trazar. <b>Esto es lo que arregla los bordes rotos</b>
-          en logos: sin ello, el suavizado de los bordes se traza como franjas dentadas.
-        </p>
-
-        <div class="field">
-          <label for="svgColors">Número de colores</label>
-          <div class="row">
-            <input type="range" id="svgColors" min="2" max="32" step="1" value="8">
-            <span class="val" id="svgColorsVal">8</span>
-          </div>
-          <p class="note">Menos colores = trazados más limpios y archivo más ligero. Un logo suele necesitar entre 2 y 8.</p>
-        </div>
-
-        <div class="field">
-          <label for="svgSmooth">Simplificación de curvas</label>
-          <div class="row">
-            <input type="range" id="svgSmooth" min="1" max="40" step="1" value="10">
-            <span class="val" id="svgSmoothVal">1.0</span>
-          </div>
-          <p class="note">Más alto = trazados más suaves y ligeros, pero menos fieles al original.</p>
-        </div>
-
-        <div class="field">
-          <label for="svgBlur">Suavizado previo</label>
-          <div class="row">
-            <input type="range" id="svgBlur" min="0" max="5" step="1" value="1">
-            <span class="val" id="svgBlurVal">1</span>
-          </div>
-          <p class="note">Desenfoca la imagen ANTES de trazar. Elimina el ruido que ensucia el resultado. Súbelo con fotos, bájalo a 0 con logos limpios.</p>
-        </div>
-
-        <div class="field">
-          <label for="svgOmit">Eliminar motas</label>
-          <div class="row">
-            <input type="range" id="svgOmit" min="0" max="40" step="1" value="12">
-            <span class="val" id="svgOmitVal">12</span>
-          </div>
-          <p class="note">Descarta las manchas más pequeñas que este umbral. Sube si ves "confeti" de puntos sueltos.</p>
-        </div>
-
-        <div class="field">
-          <label for="svgRes">Resolución del trazado</label>
-          <div class="row">
-            <input type="range" id="svgRes" min="20" max="100" step="5" value="60">
-            <span class="val" id="svgResVal">60%</span>
-          </div>
-          <p class="note">Traza sobre una versión reducida y reescala el resultado: menos ruido, más limpio y mucho más rápido. El SVG conserva el tamaño original.</p>
-        </div>
-
-        <button class="btn-sm" id="btnSvgPreview" style="width:100%">Previsualizar vectorizado</button>
-        <p class="note" id="svgInfo"></p>
-      </div>
-
       <label class="check">
         <input type="checkbox" id="keepView" checked>
         Mantener el encuadre al cambiar de foto
@@ -308,19 +224,6 @@
   </section>
 </main>
 
-<!-- ImageTracer.js — vectorizador raster→SVG en JavaScript puro.
-     Licencia: Unlicense (dominio público). Corre 100% en el navegador,
-     sin servidor, sin API key, sin registro.
-     Fuente: https://github.com/jankovicsandras/imagetracerjs
-     Si el CDN no carga, la app avisa y el resto sigue funcionando. -->
-<script src="https://cdn.jsdelivr.net/npm/imagetracerjs@1.2.6/imagetracer_v1.2.6.js"></script>
-<script>
-  /* Respaldo: si el primer CDN falla, se prueba otro antes de rendirse.
-     (Carga síncrona con document.write para que app.js ya la encuentre.) */
-  if (typeof ImageTracer === 'undefined') {
-    document.write('<scr' + 'ipt src="https://unpkg.com/imagetracerjs@1.2.6/imagetracer_v1.2.6.js"><\/scr' + 'ipt>');
-  }
-</script>
 <script src="js/app.js"></script>
 </body>
 </html>
