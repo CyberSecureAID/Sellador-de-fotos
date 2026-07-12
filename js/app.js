@@ -319,6 +319,7 @@ function refreshHeader(){
 ═══════════════════════════════════════════════════════════ */
 async function select(i){
   if (cropMode) exitCrop();
+  if (typeof vectorMode !== 'undefined' && vectorMode) exitVector();
   const keep = $('keepView').checked && cv && zoom > fitZoom * 1.05;
   const prevZoom = zoom;
 
@@ -797,7 +798,71 @@ cropUI.addEventListener('pointermove', e => {
   cropUI.addEventListener(ev, () => { cDrag = null; })
 );
 
-$('zCrop').onclick   = () => cropMode ? exitCrop() : enterCrop();
+/* ═══════════════════════════════════════════════════════════
+   MODO VECTORIZADO — vista en vivo dentro del área de trabajo
+   ───────────────────────────────────────────────────────────
+   Antes solo se podía ver el resultado exportando el archivo y
+   abriéndolo fuera. El área de trabajo es para TRABAJAR: aquí se
+   muestra el SVG real, con su recuento de trazados y peso, para
+   ajustar colores y suavizado hasta dar con el resultado.
+═══════════════════════════════════════════════════════════ */
+let vectorMode = false;
+
+function exitVector(){
+  vectorMode = false;
+  $('zVector').style.color = '';
+  $('zVector').textContent = 'Vectorizar';
+  if (current >= 0) draw();
+}
+
+function enterVector(){
+  if (current < 0) return;
+  if (typeof ImageTracer === 'undefined') {
+    statusEl.textContent = 'La librería de vectorización no cargó (revisa tu conexión e inténtalo de nuevo).';
+    return;
+  }
+  if (cropMode) exitCrop();
+
+  vectorMode = true;
+  $('zVector').style.color = 'var(--neon)';
+  $('zVector').textContent = 'Vectorizando…';
+  statusEl.textContent = 'Trazando… (puede tardar unos segundos)';
+
+  // setTimeout: deja pintar el aviso antes de bloquear con el trazado
+  setTimeout(() => {
+    try {
+      const t0 = performance.now();
+      const svg = vectorize(photos[current]);
+      const ms  = Math.round(performance.now() - t0);
+      const kb  = (new Blob([svg]).size / 1024).toFixed(0);
+      const np  = (svg.match(/<path/g) || []).length;
+
+      stage.innerHTML = '';
+      const box = document.createElement('div');
+      box.className = 'vec-view';
+      box.innerHTML = svg;
+      const el = box.querySelector('svg');
+      if (el) {
+        el.removeAttribute('width');
+        el.removeAttribute('height');
+        el.style.maxWidth = '100%';
+        el.style.maxHeight = '100%';
+      }
+      stage.appendChild(box);
+      stage.appendChild(cropUI);
+
+      $('zVector').textContent = 'Vectorizado';
+      statusEl.textContent = `${np} trazados · ${kb} KB · ${ms} ms — ajusta colores y suavizado y vuelve a pulsar.`;
+    } catch (e) {
+      statusEl.textContent = 'Error al vectorizar: ' + e.message;
+      exitVector();
+    }
+  }, 30);
+}
+
+$('zVector').onclick = () => vectorMode ? exitVector() : enterVector();
+
+$('zCrop').onclick   = () => { if (vectorMode) exitVector(); cropMode ? exitCrop() : enterCrop(); };
 $('cropCancel').onclick = exitCrop;
 
 $('cropReset').onclick = () => {
@@ -1038,6 +1103,8 @@ $('btnExport').onclick = async () => {
   const entries = [];
   const used = new Set();
 
+  try {
+
   for (let i = 0; i < photos.length; i++) {
     const p = photos[i];
     statusEl.textContent = `Exportando ${i + 1} de ${photos.length}… (${F.ext.toUpperCase()})`;
@@ -1114,9 +1181,19 @@ $('btnExport').onclick = async () => {
 
   exported = true;
   statusEl.textContent = `Listo: ${entries.length} archivo(s) en ${F.ext.toUpperCase()}.`;
-  $('bar').classList.remove('on');
-  $('barFill').style.width = '0';
-  btn.disabled = false;
+
+  } catch (err) {
+    /* Cualquier fallo (vectorización, memoria, formato…) se muestra en vez
+       de romper la promesa en silencio, que era lo que hacía parecer que el
+       botón no hacía nada. */
+    console.error(err);
+    statusEl.textContent = 'Error al exportar: ' + (err.message || err);
+    alert('No se pudo completar la exportación.\n\n' + (err.message || err));
+  } finally {
+    $('bar').classList.remove('on');
+    $('barFill').style.width = '0';
+    btn.disabled = false;      // el botón SIEMPRE vuelve a funcionar
+  }
 };
 
 /* ═══ Colores del sello (blanco por defecto) ═══ */
@@ -1200,6 +1277,24 @@ $('btnSvgPreview').onclick = () => {
 if (document.fonts && document.fonts.ready) {
   document.fonts.ready.then(() => { if (current >= 0) draw(true); });
 }
+
+/* ─── Estado de la librería de vectorización ───
+   Si no cargó (sin internet, CDN caído, bloqueador), se avisa AQUÍ y se
+   deshabilita la opción SVG. Antes fallaba en silencio al exportar y
+   parecía que el botón no hacía nada. */
+window.addEventListener('load', () => {
+  const opt = [...$('fmt').options].find(o => o.value === 'svg');
+  if (typeof ImageTracer === 'undefined') {
+    if (opt) {
+      opt.disabled = true;
+      opt.textContent = 'SVG — no disponible (sin conexión)';
+    }
+    $('zVector').disabled = true;
+    $('zVector').title = 'La librería de vectorización no cargó';
+    statusEl.textContent = 'Vectorización no disponible: la librería no cargó. Necesitas internet la primera vez.';
+    setTimeout(() => { if (statusEl.textContent.startsWith('Vectorización no')) statusEl.textContent = ''; }, 6000);
+  }
+});
 
 /* Pie por defecto (edítalo a tu gusto) */
 $('extra').value = '';
