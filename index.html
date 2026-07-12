@@ -219,17 +219,18 @@
         </div>
 
         <div class="field">
-          <label for="svgPreset">Estilo de trazado</label>
-          <select id="svgPreset">
-            <option value="default" selected>Estándar</option>
-            <option value="posterized2">Posterizado (logos planos)</option>
-            <option value="sharp">Nítido (bordes duros)</option>
-            <option value="smoothed">Suavizado</option>
-            <option value="curvy">Curvo</option>
-            <option value="detailed">Detallado (más pesado)</option>
-            <option value="grayscale">Escala de grises</option>
+          <label for="svgKind">Tipo de imagen</label>
+          <select id="svgKind">
+            <option value="logo" selected>Logo / icono plano</option>
+            <option value="line">Dibujo de línea / firma</option>
+            <option value="gradient">Logo con degradados</option>
+            <option value="photo">Fotografía (efecto póster)</option>
+            <option value="manual">Manual (ajusto yo)</option>
           </select>
+          <p class="note">Elige el tipo y los ajustes de abajo se configuran solos. Un logo necesita justo lo contrario que una foto.</p>
         </div>
+
+        <input type="hidden" id="svgPreset" value="default">
 
         <div class="field">
           <label for="svgColors">Número de colores</label>
