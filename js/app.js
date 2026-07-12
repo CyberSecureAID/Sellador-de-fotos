@@ -1023,6 +1023,65 @@ function tracerOptions(traceScale){
   };
 }
 
+/* Ajusta cada píxel al color dominante más cercano (k-means ligero) y
+   vuelve binario el canal alfa. Es lo que elimina el halo del
+   anti-aliasing, que es lo que rompe los bordes al vectorizar. */
+function snapColors(imgd, k){
+  const d = imgd.data, n = d.length / 4;
+
+  // Alfa binario: fuera los bordes semitransparentes
+  for (let i = 0; i < n; i++) d[i*4+3] = d[i*4+3] < 128 ? 0 : 255;
+
+  // Semillas iniciales: muestreo uniforme de píxeles opacos
+  const cent = [];
+  for (let i = 0; i < k; i++) {
+    const j = Math.floor(i * n / k) * 4;
+    cent.push([d[j], d[j+1], d[j+2]]);
+  }
+
+  const idx = new Uint8Array(n);
+  for (let iter = 0; iter < 6; iter++) {
+    // Asignar cada píxel a su centro más cercano
+    for (let i = 0; i < n; i++) {
+      const o = i*4;
+      if (d[o+3] === 0) { idx[i] = 255; continue; }   // transparente
+      let best = 0, bd = Infinity;
+      for (let c = 0; c < k; c++) {
+        const dr = d[o]   - cent[c][0];
+        const dg = d[o+1] - cent[c][1];
+        const db = d[o+2] - cent[c][2];
+        const dist = dr*dr + dg*dg + db*db;
+        if (dist < bd) { bd = dist; best = c; }
+      }
+      idx[i] = best;
+    }
+    // Recalcular los centros
+    const sum = Array.from({length:k}, () => [0,0,0,0]);
+    for (let i = 0; i < n; i++) {
+      const c = idx[i];
+      if (c === 255) continue;
+      const o = i*4;
+      sum[c][0] += d[o]; sum[c][1] += d[o+1]; sum[c][2] += d[o+2]; sum[c][3]++;
+    }
+    for (let c = 0; c < k; c++) {
+      if (sum[c][3]) {
+        cent[c][0] = Math.round(sum[c][0] / sum[c][3]);
+        cent[c][1] = Math.round(sum[c][1] / sum[c][3]);
+        cent[c][2] = Math.round(sum[c][2] / sum[c][3]);
+      }
+    }
+  }
+
+  // Pintar cada píxel con el color exacto de su centro
+  for (let i = 0; i < n; i++) {
+    const c = idx[i];
+    if (c === 255) continue;
+    const o = i*4;
+    d[o] = cent[c][0]; d[o+1] = cent[c][1]; d[o+2] = cent[c][2];
+  }
+  return imgd;
+}
+
 /* Devuelve el SVG (texto) de una foto ya sellada y recortada.
 
    DOS CORRECCIONES IMPORTANTES:
@@ -1051,7 +1110,20 @@ function vectorize(p){
   sg.imageSmoothingQuality = 'high';
   sg.drawImage(full, 0, 0, w, h);
 
-  const imgd = sg.getImageData(0, 0, w, h);
+  let imgd = sg.getImageData(0, 0, w, h);
+
+  /* LIMPIEZA DE BORDES (anti-aliasing) — la clave para que un logo
+     salga con bordes limpios.
+     Los bordes suavizados de un PNG/JPG no son duros: tienen píxeles
+     intermedios. El trazador no sabe que eso es SUAVIZADO: cree que
+     son colores nuevos y los convierte en franjas finas y dentadas.
+     Aquí se "endurecen" los colores antes de trazar: cada píxel se
+     ajusta al color dominante más cercano, y el canal alfa se vuelve
+     binario. Resultado: bordes nítidos en vez de rotos. */
+  if ($('svgClean').checked) {
+    imgd = snapColors(imgd, +$('svgColors').value);
+  }
+
   let svg = ImageTracer.imagedataToSVG(imgd, tracerOptions(ts));
 
   // Inyectar viewBox si falta (evita el recorte y permite escalar)
