@@ -206,6 +206,7 @@ async function addFiles(files){
       usedMtime: false,
       rename: '',         // nombre elegido por ti para la exportación
       crop: null,         // {x,y,w,h} en píxeles — null = imagen entera
+      resize: 100,        // % del tamaño de salida (100 = original)
       meta: ex ? ex.all : null,   // metadatos completos (solo lectura)
       bytes: f.size
     };
@@ -288,6 +289,7 @@ function removePhoto(i){
     hintEl.style.display  = 'none';
     $('editor').style.display = 'none';
     $('noSel').style.display  = 'block';
+    $('resizeCtl').style.display = 'none';
   } else {
     select(current);
   }
@@ -331,10 +333,14 @@ async function select(i){
 
   $('noSel').style.display = 'none';
   $('editor').style.display = 'block';
-  $('warnNoExif').style.display = (!p.exifDate && !p.usedMtime) ? 'block' : 'none';
   $('lines').value = p.lines.join('\n');
   $('rename').value = p.rename || '';
   showMeta(p);
+
+  // Control de tamaño: refleja el valor de esta foto y muestra sus px
+  $('resizeCtl').style.display = 'flex';
+  $('resizePct').value = p.resize != null ? p.resize : 100;
+  updateResizeLabel(p);
 
   if (!p.bmp) p.bmp = await createImageBitmap(p.file);
 
@@ -407,6 +413,28 @@ function showMeta(p){
     total ? `Metadatos del archivo · ${total} campos` : 'Metadatos del archivo · ninguno';
 }
 
+/* Muestra el % y el tamaño resultante en píxeles, para que sepas
+   exactamente a qué resolución vas a exportar. */
+function updateResizeLabel(p){
+  const pct = +$('resizePct').value;
+  let base = '';
+  if (p && p.bmp) {
+    const o = p.orientation, swap = o >= 5 && o <= 8;
+    let w = swap ? p.bmp.height : p.bmp.width;
+    let h = swap ? p.bmp.width  : p.bmp.height;
+    if (p.crop) { w = Math.round(p.crop.w); h = Math.round(p.crop.h); }
+    base = ` · ${Math.round(w*pct/100)}×${Math.round(h*pct/100)} px`;
+  }
+  $('resizeVal').textContent = pct + '%' + base;
+}
+
+$('resizePct').oninput = () => {
+  if (current < 0) return;
+  photos[current].resize = +$('resizePct').value;
+  updateResizeLabel(photos[current]);
+  draw(true);
+};
+
 $('lines').oninput = () => {
   if (current < 0) return;
   photos[current].lines = $('lines').value.split('\n');
@@ -437,27 +465,6 @@ $('btnClearAll').onclick = () => {
 };
 
 $('btnDelete').onclick = () => { if (current >= 0) removePhoto(current); };
-
-$('btnResetOne').onclick = () => {
-  const p = photos[current];
-  if (!p) return;
-  p.usedMtime = false;
-  p.lines = buildLines(p);
-  $('lines').value = p.lines.join('\n');
-  $('warnNoExif').style.display = p.exifDate ? 'none' : 'block';
-  draw(); renderList();
-};
-
-$('btnUseMtime').onclick = () => {
-  const p = photos[current];
-  if (!p) return;
-  p.usedMtime = true;
-  const extra = $('extra').value.split('\n').map(s => s.trim()).filter(Boolean);
-  p.lines = [stampDate(p.mtime), ...extra];
-  $('lines').value = p.lines.join('\n');
-  $('warnNoExif').style.display = 'none';
-  draw();
-};
 
 /* Aplica el pie fijo a TODAS, conservando la fecha propia de cada una */
 $('btnApplyExtra').onclick = () => {
@@ -522,13 +529,24 @@ function renderTo(canvas, p, ignoreCrop){
     ? p.crop
     : { x:0, y:0, w:full.width, h:full.height };
 
-  const W = Math.max(1, Math.round(cr.w));
-  const H = Math.max(1, Math.round(cr.h));
+  let W = Math.max(1, Math.round(cr.w));
+  let H = Math.max(1, Math.round(cr.h));
+
+  /* REDIMENSIONADO: reduce el tamaño real de salida. Por foto (p.resize)
+     o global si no se ha fijado. Se aplica sobre las dimensiones ya
+     recortadas, así el sello se recalcula a la nueva escala. */
+  const pct = (ignoreCrop ? 100 : (p.resize != null ? p.resize : 100)) / 100;
+  W = Math.max(1, Math.round(W * pct));
+  H = Math.max(1, Math.round(H * pct));
+
   canvas.width = W; canvas.height = H;
   const g = canvas.getContext('2d');
+  g.imageSmoothingEnabled = true;
+  g.imageSmoothingQuality = 'high';
 
-  // RECORTE REAL: solo se copian los píxeles de la región elegida.
-  g.drawImage(full, Math.round(cr.x), Math.round(cr.y), W, H, 0, 0, W, H);
+  // RECORTE + ESCALADO REAL: se copia la región elegida al tamaño final.
+  g.drawImage(full, Math.round(cr.x), Math.round(cr.y),
+              Math.round(cr.w), Math.round(cr.h), 0, 0, W, H);
 
   // El sello se recoloca en la esquina de la imagen YA RECORTADA.
   const lines = (p.lines || []).filter(l => l.trim() !== '');
@@ -728,6 +746,7 @@ function enterCrop(){
   if (!p || !p.bmp) return;
 
   cropMode = true;
+  $('cropActions').style.display = 'flex';   // botones en la barra, no sobre la foto
   const full = orientedCanvas(p);
   imgW = full.width; imgH = full.height;
 
@@ -742,6 +761,7 @@ function enterCrop(){
 
 function exitCrop(){
   cropMode = false;
+  $('cropActions').style.display = 'none';
   cropUI.classList.remove('on');
   $('zCrop').style.color = '';
   draw();
