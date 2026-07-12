@@ -159,7 +159,7 @@
   }
   /* Controles de zoom flotantes */
   .zoombar{
-    position:absolute;right:10px;bottom:10px;z-index:3;
+    position:absolute;right:10px;bottom:10px;z-index:7;  /* por encima de .crop-ui (4) */
     display:flex;align-items:center;gap:4px;
     background:rgba(20,18,15,.9);border:1px solid var(--line);
     border-radius:8px;padding:4px;backdrop-filter:blur(6px);
@@ -173,6 +173,64 @@
     font-family:var(--mono);font-size:11px;color:var(--dim);
     min-width:44px;text-align:center;
   }
+  /* ═══ HERRAMIENTA DE RECORTE (estilo Photoshop) ═══
+     El recuadro claro es la zona que se conserva; todo lo de fuera se
+     oscurece con un box-shadow gigante (truco clásico: una sola capa
+     en vez de cuatro divs). Ocho tiradores + rejilla de tercios. */
+  .crop-ui{position:absolute;inset:0;z-index:4;display:none}
+  .crop-ui.on{display:block}
+
+  .crop-box{
+    position:absolute;
+    box-shadow:0 0 0 9999px rgba(0,0,0,.62);
+    outline:1px solid rgba(255,255,255,.9);
+    cursor:move;
+  }
+  /* Rejilla de tercios */
+  .crop-box::before,.crop-box::after{
+    content:'';position:absolute;inset:0;pointer-events:none;
+  }
+  .crop-box::before{
+    background:
+      linear-gradient(to right,transparent 33.33%,rgba(255,255,255,.35) 33.33%,rgba(255,255,255,.35) calc(33.33% + 1px),transparent calc(33.33% + 1px)),
+      linear-gradient(to right,transparent 66.66%,rgba(255,255,255,.35) 66.66%,rgba(255,255,255,.35) calc(66.66% + 1px),transparent calc(66.66% + 1px));
+  }
+  .crop-box::after{
+    background:
+      linear-gradient(to bottom,transparent 33.33%,rgba(255,255,255,.35) 33.33%,rgba(255,255,255,.35) calc(33.33% + 1px),transparent calc(33.33% + 1px)),
+      linear-gradient(to bottom,transparent 66.66%,rgba(255,255,255,.35) 66.66%,rgba(255,255,255,.35) calc(66.66% + 1px),transparent calc(66.66% + 1px));
+  }
+
+  /* Tiradores: escuadras en las esquinas, barras en los lados */
+  .ch{position:absolute;background:#FFF;border-radius:1px}
+  .ch.c{width:14px;height:14px;border:2px solid #14120F}
+  .ch.e{background:rgba(255,255,255,.92);border:1px solid #14120F}
+  .ch[data-h=nw]{left:-7px;top:-7px;cursor:nwse-resize}
+  .ch[data-h=ne]{right:-7px;top:-7px;cursor:nesw-resize}
+  .ch[data-h=sw]{left:-7px;bottom:-7px;cursor:nesw-resize}
+  .ch[data-h=se]{right:-7px;bottom:-7px;cursor:nwse-resize}
+  .ch[data-h=n]{left:50%;top:-4px;width:34px;height:7px;margin-left:-17px;cursor:ns-resize}
+  .ch[data-h=s]{left:50%;bottom:-4px;width:34px;height:7px;margin-left:-17px;cursor:ns-resize}
+  .ch[data-h=w]{top:50%;left:-4px;width:7px;height:34px;margin-top:-17px;cursor:ew-resize}
+  .ch[data-h=e]{top:50%;right:-4px;width:7px;height:34px;margin-top:-17px;cursor:ew-resize}
+
+  .crop-actions{
+    position:absolute;left:50%;top:12px;transform:translateX(-50%);
+    z-index:6;display:flex;gap:6px;
+    background:rgba(20,18,15,.94);border:1px solid var(--line);
+    border-radius:8px;padding:5px;backdrop-filter:blur(6px);
+  }
+  .crop-size{
+    position:absolute;z-index:6;
+    font-family:var(--mono);font-size:10px;color:#FFF;
+    background:rgba(20,18,15,.85);padding:2px 6px;border-radius:4px;
+    pointer-events:none;
+  }
+  .cropped-tag{
+    font-family:var(--mono);font-size:9px;color:var(--amber);
+    margin-left:6px;
+  }
+
   .hint{
     position:absolute;left:10px;bottom:10px;z-index:3;
     font-family:var(--mono);font-size:10px;color:var(--faint);
@@ -297,6 +355,27 @@
         <button id="zIn" title="Acercar">+</button>
         <button id="zFit" title="Ajustar a la ventana">Ajustar</button>
         <button id="zStamp" title="Ver el sello al 100%">Sello</button>
+        <button id="zCrop" title="Recortar la imagen">Recortar</button>
+      </div>
+
+      <!-- ═══ Capa de recorte (estilo Photoshop) ═══ -->
+      <div class="crop-ui" id="cropUI">
+        <div class="crop-box" id="cropBox">
+          <span class="ch c" data-h="nw"></span>
+          <span class="ch c" data-h="ne"></span>
+          <span class="ch c" data-h="sw"></span>
+          <span class="ch c" data-h="se"></span>
+          <span class="ch e" data-h="n"></span>
+          <span class="ch e" data-h="s"></span>
+          <span class="ch e" data-h="w"></span>
+          <span class="ch e" data-h="e"></span>
+        </div>
+        <span class="crop-size" id="cropSize"></span>
+        <div class="crop-actions">
+          <button class="btn-go btn-sm" id="cropApply">Aplicar recorte</button>
+          <button class="btn-sm" id="cropReset">Todo</button>
+          <button class="btn-sm" id="cropCancel">Cancelar</button>
+        </div>
       </div>
       <div class="hint" id="hint" style="display:none">Rueda = zoom · Arrastrar = mover · Doble clic = ajustar</div>
     </div>
@@ -595,6 +674,7 @@ const listEl = $('list'), stage = $('stage'), statusEl = $('status');
    documento y getElementById devuelve null. Guardarlos aquí evita
    que draw() se rompa a mitad y deje la interfaz a medias. */
 const zoomBar = $('zoombar'), hintEl = $('hint');
+const cropUI = $('cropUI'), cropBox = $('cropBox'), cropSizeEl = $('cropSize');
 
 /* ═══════════════════════════════════════════════════════════
    4. CARGA
@@ -630,6 +710,7 @@ async function addFiles(files){
       lines: null,
       usedMtime: false,
       rename: '',         // nombre elegido por ti para la exportación
+      crop: null,         // {x,y,w,h} en píxeles — null = imagen entera
       meta: ex ? ex.all : null,   // metadatos completos (solo lectura)
       bytes: f.size
     };
@@ -663,7 +744,9 @@ function renderList(){
       <span class="dot ${has ? 'ok' : 'bad'}"></span>
       <img src="${p.url}" alt="">
       <span class="meta">
-        <span class="nm">${p.rename || p.file.name}</span>
+        <span class="nm">${p.rename || p.file.name}${
+          p.crop ? '<span class="cropped-tag">recortada</span>' : ''
+        }</span>
         <span class="dt ${has ? '' : 'bad'}">${
           has ? stampDate(p.exifDate) : 'sin fecha EXIF'
         }</span>
@@ -703,6 +786,9 @@ function removePhoto(i){
     stage.innerHTML = '<div class="empty">Sin fotos cargadas.</div>';
     stage.appendChild(zoomBar);
     stage.appendChild(hintEl);
+    stage.appendChild(cropUI);
+    cropUI.classList.remove('on');
+    cropMode = false;
     zoomBar.style.display = 'none';
     hintEl.style.display  = 'none';
     $('editor').style.display = 'none';
@@ -728,6 +814,7 @@ function refreshHeader(){
    6. SELECCIÓN Y VISTA PREVIA
 ═══════════════════════════════════════════════════════════ */
 async function select(i){
+  if (cropMode) exitCrop();
   const keep = $('keepView').checked && cv && zoom > fitZoom * 1.05;
   const prevZoom = zoom;
 
@@ -875,16 +962,18 @@ $('btnApplyExtra').onclick = () => {
    se pierde detalle. Se respeta la orientación EXIF para que las
    fotos verticales no salgan tumbadas.
 ═══════════════════════════════════════════════════════════ */
-function renderTo(canvas, p){
+/* Dibuja la imagen ORIENTADA a tamaño completo en un lienzo aparte.
+   Es la base tanto para la vista normal como para el modo recorte. */
+function orientedCanvas(p){
   const bmp = p.bmp;
   const o = p.orientation;
   const swap = o >= 5 && o <= 8;
   const W = swap ? bmp.height : bmp.width;
   const H = swap ? bmp.width  : bmp.height;
 
-  canvas.width = W; canvas.height = H;
-  const g = canvas.getContext('2d');
-
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
   g.save();
   switch (o) {
     case 2: g.translate(W, 0); g.scale(-1, 1); break;
@@ -897,12 +986,32 @@ function renderTo(canvas, p){
   }
   g.drawImage(bmp, 0, 0);
   g.restore();
+  return c;
+}
 
+/* Pinta la foto (recortada si procede) y le estampa el sello.
+   Se trabaja a resolución COMPLETA: nada se reescala, así que no se
+   pierde detalle. `ignoreCrop` sirve al modo recorte, que necesita
+   ver la imagen entera para poder reencuadrarla. */
+function renderTo(canvas, p, ignoreCrop){
+  const full = orientedCanvas(p);
+
+  const cr = (!ignoreCrop && p.crop)
+    ? p.crop
+    : { x:0, y:0, w:full.width, h:full.height };
+
+  const W = Math.max(1, Math.round(cr.w));
+  const H = Math.max(1, Math.round(cr.h));
+  canvas.width = W; canvas.height = H;
+  const g = canvas.getContext('2d');
+
+  // RECORTE REAL: solo se copian los píxeles de la región elegida.
+  g.drawImage(full, Math.round(cr.x), Math.round(cr.y), W, H, 0, 0, W, H);
+
+  // El sello se recoloca en la esquina de la imagen YA RECORTADA.
   const lines = (p.lines || []).filter(l => l.trim() !== '');
   if (!lines.length) return;
 
-  // El tamaño se calcula sobre el lado menor: así el sello se ve
-  // igual de grande en fotos verticales y horizontales.
   const base = Math.min(W, H);
   const fs   = base * ($('size').value / 1000);
   const pad  = base * ($('pad').value  / 1000);
@@ -912,9 +1021,6 @@ function renderTo(canvas, p){
   g.textAlign = 'right';
   g.textBaseline = 'top';
 
-  /* Sombra suave: mantiene el texto legible sobre cielo claro o fondo
-     oscuro por igual. Si la tinta es negra, la sombra se vuelve clara
-     para que no se pierda sobre fondos oscuros. */
   const dark = inkColor === '#1A1A1A';
   g.shadowColor = dark ? 'rgba(255,255,255,.65)' : 'rgba(0,0,0,.72)';
   g.shadowBlur = fs * 0.22;
@@ -991,6 +1097,17 @@ stage.addEventListener('wheel', e => {
 let dragging = false, lastX = 0, lastY = 0;
 stage.addEventListener('pointerdown', e => {
   if (!cv) return;
+
+  /* BUG QUE ESTO CORRIGE — importante:
+     La barra de zoom y la capa de recorte viven DENTRO del escenario.
+     Al pulsar uno de sus botones, el pointerdown burbujeaba hasta aquí
+     y el escenario capturaba el puntero (setPointerCapture). A partir
+     de ese momento el navegador redirige el `click` al elemento que
+     capturó — es decir, al escenario — y el onclick del BOTÓN nunca se
+     dispara. Los botones parecían decorativos.
+     Solución: si el gesto nace en la interfaz, no se captura nada. */
+  if (e.target.closest && e.target.closest('.zoombar, .crop-ui, .crop-actions')) return;
+
   dragging = true; lastX = e.clientX; lastY = e.clientY;
   stage.classList.add('drag');
   stage.setPointerCapture(e.pointerId);
@@ -1018,7 +1135,7 @@ function draw(keepView){
   if (!p.bmp) return;
 
   const c = document.createElement('canvas');
-  renderTo(c, p);
+  renderTo(c, p, cropMode);      // en modo recorte se ve la foto entera
 
   stage.innerHTML = '';
   stage.appendChild(c);
@@ -1028,6 +1145,7 @@ function draw(keepView){
   hintEl.style.display = 'block';
   stage.appendChild(zoomBar);
   stage.appendChild(hintEl);
+  stage.appendChild(cropUI);      // sin esto, stage.innerHTML='' la destruiría
 
   /* keepView solo lo pide la edición de texto (para no reencuadrar a
      cada tecla). En cualquier otro caso la foto se abre ENCAJADA. */
@@ -1040,6 +1158,129 @@ function draw(keepView){
 }
 
 window.addEventListener('resize', () => { if (cv) fitToStage(); });
+
+/* ═══════════════════════════════════════════════════════════
+   7c. RECORTE (estilo Photoshop)
+   ───────────────────────────────────────────────────────────
+   El recuadro vive en COORDENADAS DE IMAGEN (píxeles reales), no de
+   pantalla: así el recorte es exacto sea cual sea el zoom. Ocho
+   tiradores, arrastre para mover, rejilla de tercios y exterior
+   oscurecido. Nunca se sale de los bordes: solo recorta, no expande.
+   El recorte es REAL — los píxeles se descartan en la exportación.
+═══════════════════════════════════════════════════════════ */
+let cropMode = false;
+let cr = null;            // {x,y,w,h} en píxeles de la imagen
+let imgW = 0, imgH = 0;   // tamaño de la imagen orientada completa
+
+const MINC = 24;          // lado mínimo del recorte, en píxeles
+
+function enterCrop(){
+  const p = photos[current];
+  if (!p || !p.bmp) return;
+
+  cropMode = true;
+  const full = orientedCanvas(p);
+  imgW = full.width; imgH = full.height;
+
+  // Parte del recorte que ya tuviera, o de la imagen entera
+  cr = p.crop ? { ...p.crop } : { x:0, y:0, w:imgW, h:imgH };
+
+  draw();                       // redibuja SIN recorte (imagen entera)
+  cropUI.classList.add('on');
+  $('zCrop').style.color = 'var(--amber)';
+  paintCrop();
+}
+
+function exitCrop(){
+  cropMode = false;
+  cropUI.classList.remove('on');
+  $('zCrop').style.color = '';
+  draw();
+}
+
+/* Traduce el rectángulo (píxeles de imagen) a la pantalla, usando el
+   mismo zoom y paneo del lienzo: el recuadro sigue a la imagen. */
+function paintCrop(){
+  if (!cr || !cv) return;
+  cropBox.style.left   = (panX + cr.x * zoom) + 'px';
+  cropBox.style.top    = (panY + cr.y * zoom) + 'px';
+  cropBox.style.width  = (cr.w * zoom) + 'px';
+  cropBox.style.height = (cr.h * zoom) + 'px';
+
+  cropSizeEl.style.left = (panX + cr.x * zoom) + 'px';
+  cropSizeEl.style.top  = (panY + cr.y * zoom - 20) + 'px';
+  cropSizeEl.textContent = `${Math.round(cr.w)} × ${Math.round(cr.h)} px`;
+}
+
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/* Arrastre: mover el recuadro entero o estirar desde un tirador */
+let cDrag = null;
+cropUI.addEventListener('pointerdown', e => {
+  if (!cropMode || !cr) return;
+  const h = e.target.dataset ? e.target.dataset.h : null;
+  const onBox = e.target === cropBox || h;
+  if (!onBox) return;
+
+  e.preventDefault(); e.stopPropagation();
+  cDrag = { h: h || 'move', x: e.clientX, y: e.clientY, s: { ...cr } };
+  cropUI.setPointerCapture(e.pointerId);
+});
+
+cropUI.addEventListener('pointermove', e => {
+  if (!cDrag) return;
+  const dx = (e.clientX - cDrag.x) / zoom;   // pantalla → píxeles de imagen
+  const dy = (e.clientY - cDrag.y) / zoom;
+  const s = cDrag.s, h = cDrag.h;
+
+  if (h === 'move') {
+    cr.x = clamp(s.x + dx, 0, imgW - s.w);
+    cr.y = clamp(s.y + dy, 0, imgH - s.h);
+  } else {
+    let x1 = s.x, y1 = s.y, x2 = s.x + s.w, y2 = s.y + s.h;
+    if (h.includes('w')) x1 = clamp(s.x + dx, 0, x2 - MINC);
+    if (h.includes('e')) x2 = clamp(s.x + s.w + dx, x1 + MINC, imgW);
+    if (h.includes('n')) y1 = clamp(s.y + dy, 0, y2 - MINC);
+    if (h.includes('s')) y2 = clamp(s.y + s.h + dy, y1 + MINC, imgH);
+    cr = { x:x1, y:y1, w:x2 - x1, h:y2 - y1 };
+  }
+  paintCrop();
+});
+
+['pointerup','pointercancel'].forEach(ev =>
+  cropUI.addEventListener(ev, () => { cDrag = null; })
+);
+
+$('zCrop').onclick   = () => cropMode ? exitCrop() : enterCrop();
+$('cropCancel').onclick = exitCrop;
+
+$('cropReset').onclick = () => {
+  cr = { x:0, y:0, w:imgW, h:imgH };
+  paintCrop();
+};
+
+$('cropApply').onclick = () => {
+  const p = photos[current];
+  if (!p || !cr) return;
+
+  // Si abarca la imagen entera, se guarda como "sin recorte"
+  const entera = cr.x < 1 && cr.y < 1 && cr.w > imgW - 2 && cr.h > imgH - 2;
+  p.crop = entera ? null : { ...cr };
+
+  exitCrop();
+  renderList();
+  statusEl.textContent = p.crop
+    ? `Recortada a ${Math.round(cr.w)} × ${Math.round(cr.h)} px.`
+    : 'Recorte quitado.';
+  setTimeout(() => statusEl.textContent = '', 2200);
+};
+
+/* El recuadro sigue al zoom y al paneo */
+const _applyView = applyView;
+applyView = function(){
+  _applyView();
+  if (cropMode) paintCrop();
+};
 
 /* ═══════════════════════════════════════════════════════════
    8. EXPORTACIÓN — ZIP sin librerías (método "store")
