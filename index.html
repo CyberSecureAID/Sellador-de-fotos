@@ -29,6 +29,7 @@
       <option value="webp">WebP — web</option>
       <option value="avif">AVIF — compacto</option>
       <option value="pdf">PDF — imprimible</option>
+      <option value="svg">SVG — vectorizado real</option>
     </select>
   </div>
   <button id="btnExport" class="btn-go" disabled>Exportar todas</button>
@@ -202,6 +203,55 @@
         <p class="note">95 es visualmente idéntico al original. 100 evita casi toda pérdida, pero pesa más.</p>
       </div>
 
+      <!-- ═══ AJUSTES DE VECTORIZACIÓN — solo al exportar en SVG ═══
+           La vectorización convierte los píxeles en trazados matemáticos
+           reales (paths de Bézier), escalables al infinito. Funciona muy
+           bien con logos e iconos (pocos colores, bordes limpios) y mal
+           con fotografías: por eso estos controles. -->
+      <div id="svgPanel" style="display:none">
+        <hr>
+        <h2>Vectorización (SVG)</h2>
+
+        <div class="alert" style="background:rgba(55,232,160,.08);border-color:rgba(55,232,160,.3);color:#9FE8C8">
+          Convierte los píxeles en <b>trazados vectoriales reales</b>, escalables sin pixelar.
+          Ideal para <b>logos e iconos</b>. Con fotografías el resultado es pobre y el archivo, enorme.
+        </div>
+
+        <div class="field">
+          <label for="svgPreset">Estilo de trazado</label>
+          <select id="svgPreset">
+            <option value="default" selected>Estándar</option>
+            <option value="posterized2">Posterizado (logos planos)</option>
+            <option value="sharp">Nítido (bordes duros)</option>
+            <option value="smoothed">Suavizado</option>
+            <option value="curvy">Curvo</option>
+            <option value="detailed">Detallado (más pesado)</option>
+            <option value="grayscale">Escala de grises</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="svgColors">Número de colores</label>
+          <div class="row">
+            <input type="range" id="svgColors" min="2" max="32" step="1" value="8">
+            <span class="val" id="svgColorsVal">8</span>
+          </div>
+          <p class="note">Menos colores = trazados más limpios y archivo más ligero. Un logo suele necesitar entre 2 y 8.</p>
+        </div>
+
+        <div class="field">
+          <label for="svgSmooth">Simplificación de curvas</label>
+          <div class="row">
+            <input type="range" id="svgSmooth" min="1" max="40" step="1" value="10">
+            <span class="val" id="svgSmoothVal">1.0</span>
+          </div>
+          <p class="note">Más alto = trazados más suaves y ligeros, pero menos fieles al original.</p>
+        </div>
+
+        <button class="btn-sm" id="btnSvgPreview" style="width:100%">Previsualizar vectorizado</button>
+        <p class="note" id="svgInfo"></p>
+      </div>
+
       <label class="check">
         <input type="checkbox" id="keepView" checked>
         Mantener el encuadre al cambiar de foto
@@ -220,6 +270,12 @@
   </section>
 </main>
 
+<!-- ImageTracer.js — vectorizador raster→SVG en JavaScript puro.
+     Licencia: Unlicense (dominio público). Corre 100% en el navegador,
+     sin servidor, sin API key, sin registro.
+     Fuente: https://github.com/jankovicsandras/imagetracerjs
+     Si el CDN no carga, la app avisa y el resto sigue funcionando. -->
+<script src="https://cdn.jsdelivr.net/npm/imagetracerjs@1.2.6/imagetracer_v1.2.6.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
