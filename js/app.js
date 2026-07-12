@@ -921,8 +921,50 @@ const FORMATS = {
   png:  { ext:'png',  mime:'image/png',  quality:false, alpha:true  },
   webp: { ext:'webp', mime:'image/webp', quality:true,  alpha:true  },
   avif: { ext:'avif', mime:'image/avif', quality:true,  alpha:true  },
-  pdf:  { ext:'pdf',  mime:'application/pdf', quality:true, alpha:false }
+  pdf:  { ext:'pdf',  mime:'application/pdf', quality:true, alpha:false },
+  /* SVG: vectorización REAL con ImageTracer.js (dominio público).
+     No es el raster metido en un envoltorio: son paths de Bézier
+     de verdad, escalables al infinito. */
+  svg:  { ext:'svg',  mime:'image/svg+xml', quality:false, alpha:true, vector:true }
 };
+
+/* ═══════════════════════════════════════════════════════════
+   VECTORIZACIÓN (raster → SVG con trazados reales)
+   ───────────────────────────────────────────────────────────
+   ImageTracer convierte regiones de píxeles en curvas de Bézier.
+   Funciona bien con logos e iconos (pocos colores, bordes limpios);
+   con fotos produce archivos enormes y de aspecto sucio — por eso
+   la interfaz avisa y ofrece controles de color y simplificación.
+═══════════════════════════════════════════════════════════ */
+function tracerOptions(){
+  const preset = $('svgPreset').value;
+  const base = (typeof ImageTracer !== 'undefined' && ImageTracer.optionpresets &&
+                ImageTracer.optionpresets[preset])
+             ? { ...ImageTracer.optionpresets[preset] }
+             : {};
+  return {
+    ...base,
+    numberofcolors: +$('svgColors').value,   // paleta: menos = más limpio
+    ltres: +$('svgSmooth').value / 10,       // tolerancia de línea recta
+    qtres: +$('svgSmooth').value / 10,       // tolerancia de curva
+    pathomit: 8,                             // descarta manchas diminutas
+    strokewidth: 0,
+    linefilter: true,
+    scale: 1
+  };
+}
+
+/* Devuelve el SVG (texto) de una foto ya sellada y recortada. */
+function vectorize(p){
+  if (typeof ImageTracer === 'undefined') {
+    throw new Error('La librería de vectorización no se cargó. Revisa tu conexión.');
+  }
+  const c = document.createElement('canvas');
+  renderTo(c, p);                        // incluye sello y recorte
+  const g = c.getContext('2d');
+  const imgd = g.getImageData(0, 0, c.width, c.height);
+  return ImageTracer.imagedataToSVG(imgd, tracerOptions());
+}
 
 /* Comprueba si el navegador sabe CODIFICAR un formato (no todos los
    soportan AVIF/WebP al exportar). Devuelve true/false sin lanzar. */
@@ -976,9 +1018,14 @@ $('btnExport').onclick = async () => {
   const fmtKey = $('fmt').value;
   const F = FORMATS[fmtKey];
 
-  // Verificar que el navegador realmente puede codificar este formato
-  const encMime = (fmtKey === 'pdf') ? 'image/jpeg' : F.mime;
-  if (!(await canEncode(encMime))) {
+  // SVG no pasa por canvas.toBlob: se comprueba que la librería esté cargada
+  if (fmtKey === 'svg') {
+    if (typeof ImageTracer === 'undefined') {
+      alert('La librería de vectorización no se cargó.\n' +
+            'Necesitas conexión a internet la primera vez (se carga desde un CDN).');
+      return;
+    }
+  } else if (!(await canEncode((fmtKey === 'pdf') ? 'image/jpeg' : F.mime))) {
     alert(`Tu navegador no puede exportar en ${F.ext.toUpperCase()}.\n` +
           `Prueba con Chrome o Edge actualizados, o elige otro formato (JPG y PNG funcionan en todos).`);
     return;
@@ -1002,7 +1049,7 @@ $('btnExport').onclick = async () => {
 
     /* JPG y PDF no tienen transparencia: se rellena el fondo de blanco
        para que las zonas transparentes no salgan negras. */
-    if (!F.alpha) {
+    if (!F.alpha && fmtKey !== 'svg') {
       const flat = document.createElement('canvas');
       flat.width = c.width; flat.height = c.height;
       const fg = flat.getContext('2d');
@@ -1014,7 +1061,11 @@ $('btnExport').onclick = async () => {
     }
 
     let data, ext = F.ext;
-    if (fmtKey === 'pdf') {
+    if (fmtKey === 'svg') {
+      // Vectorización real: el resultado es texto SVG, no píxeles
+      const svg = vectorize(p);
+      data = new TextEncoder().encode(svg);
+    } else if (fmtKey === 'pdf') {
       const jpg = await new Promise(r => c.toBlob(r, 'image/jpeg', q));
       data = makePdf(new Uint8Array(await jpg.arrayBuffer()), c.width, c.height);
     } else {
@@ -1092,7 +1143,56 @@ COLORS.forEach(([hex, name]) => {
 });
 
 ['font','weight'].forEach(id => $(id).onchange = () => draw(true));
-$('fmt').onchange = () => refreshHeader();
+$('fmt').onchange = () => {
+  refreshHeader();
+  $('svgPanel').style.display = ($('fmt').value === 'svg') ? 'block' : 'none';
+};
+
+/* Los deslizadores del panel SVG */
+$('svgColors').oninput = () => { $('svgColorsVal').textContent = $('svgColors').value; };
+$('svgSmooth').oninput = () => { $('svgSmoothVal').textContent = (+$('svgSmooth').value / 10).toFixed(1); };
+
+/* Vista previa del vectorizado: sustituye el lienzo por el SVG real,
+   para que veas exactamente lo que vas a exportar antes de hacerlo. */
+$('btnSvgPreview').onclick = () => {
+  if (current < 0) return;
+  const p = photos[current];
+  if (typeof ImageTracer === 'undefined') {
+    $('svgInfo').textContent = 'La librería no se cargó (revisa tu conexión).';
+    return;
+  }
+  const btn = $('btnSvgPreview');
+  btn.disabled = true;
+  btn.textContent = 'Vectorizando…';
+  $('svgInfo').textContent = '';
+
+  // setTimeout: deja que el navegador pinte el "Vectorizando…" antes
+  // de bloquearse con el trazado (que es síncrono y puede tardar).
+  setTimeout(() => {
+    try {
+      const t0 = performance.now();
+      const svg = vectorize(p);
+      const ms = Math.round(performance.now() - t0);
+      const kb = (new Blob([svg]).size / 1024).toFixed(0);
+      const paths = (svg.match(/<path/g) || []).length;
+
+      stage.innerHTML = '';
+      const box = document.createElement('div');
+      box.style.cssText = 'width:100%;height:100%;display:grid;place-items:center;overflow:auto;padding:12px';
+      box.innerHTML = svg;
+      const el = box.querySelector('svg');
+      if (el) { el.style.maxWidth = '100%'; el.style.maxHeight = '100%'; el.removeAttribute('width'); el.removeAttribute('height'); }
+      stage.appendChild(box);
+      stage.appendChild(cropUI);
+
+      $('svgInfo').textContent = `${paths} trazados · ${kb} KB · ${ms} ms. Pulsa una foto de la lista para volver.`;
+    } catch (e) {
+      $('svgInfo').textContent = 'Error al vectorizar: ' + e.message;
+    }
+    btn.disabled = false;
+    btn.textContent = 'Previsualizar vectorizado';
+  }, 30);
+};
 
 /* El lienzo dibuja con la fuente que esté YA cargada. Si Roboto llega
    tarde, el primer sello saldría con la de reserva — por eso, en cuanto
