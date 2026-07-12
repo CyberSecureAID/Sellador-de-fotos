@@ -171,10 +171,26 @@
   .dot.bad{background:var(--warn)}
 
   /* ── Lienzo ── */
+  .stage-col{display:flex;flex-direction:column}
+  .stage-head{
+    display:flex;align-items:center;gap:12px;margin-bottom:12px;min-height:30px;
+  }
+  .stage-title{
+    font-family:var(--mono);font-size:10px;font-weight:500;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--faint);
+    margin-left:auto;
+  }
   .stage{
-    position:relative;overflow:hidden;
+    position:relative;overflow:hidden;flex:1;
     display:flex;align-items:center;justify-content:center;
-    height:62vh;min-height:340px;background:var(--panel);
+    /* Más alto por abajo, sin mover la parte superior: antes 62vh,
+       ahora 74vh. La columna es flex, así que el área crece hacia abajo. */
+    height:74vh;min-height:420px;
+    /* Textura de fondo del área de trabajo (patrón verde), oscurecida
+       para que la foto que edites siempre resalte por encima. */
+    background:
+      linear-gradient(rgba(11,15,13,.62), rgba(11,15,13,.72)),
+      url('stage-bg.webp') center/cover no-repeat, var(--panel);
     border-radius:10px;border:1px solid var(--line);
     cursor:grab;touch-action:none;
   }
@@ -190,10 +206,9 @@
   }
   /* Controles de zoom flotantes */
   .zoombar{
-    position:absolute;right:10px;bottom:10px;z-index:7;  /* por encima de .crop-ui (4) */
     display:flex;align-items:center;gap:4px;
-    background:rgba(20,18,15,.9);border:1px solid var(--line);
-    border-radius:8px;padding:4px;backdrop-filter:blur(6px);
+    background:var(--panel-2);border:1px solid var(--line);
+    border-radius:8px;padding:4px;
   }
   .zoombar button{
     padding:4px 9px;font-size:13px;font-family:var(--mono);
@@ -262,12 +277,6 @@
     margin-left:6px;
   }
 
-  .hint{
-    position:absolute;left:10px;bottom:10px;z-index:3;
-    font-family:var(--mono);font-size:10px;color:var(--faint);
-    background:rgba(20,18,15,.8);padding:3px 7px;border-radius:5px;
-    pointer-events:none;
-  }
   .empty{color:var(--faint);text-align:center;font-size:13px}
 
   /* ── Campos ── */
@@ -376,7 +385,7 @@
       <b>Arrastra tus fotos aquí</b>
       <small>o haz clic para elegirlas · JPG con datos EXIF</small>
     </div>
-    <input type="file" id="file" accept="image/jpeg,image/jpg" multiple hidden>
+    <input type="file" id="file" accept="image/jpeg,image/jpg,image/png,image/webp" multiple hidden>
 
     <div id="batchBar" style="display:none;margin-top:14px">
       <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -391,10 +400,10 @@
   </section>
 
   <!-- ══ Columna 2: vista previa ══ -->
-  <section class="col">
-    <h2>Vista previa</h2>
-    <div class="stage" id="stage">
-      <div class="empty">Carga fotos para empezar.<br>El sello se dibuja con la fecha real del archivo.</div>
+  <section class="col stage-col">
+    <!-- La barra de herramientas ocupa el lugar del título "Vista previa":
+         más útil y ya no invade el área de trabajo. -->
+    <div class="stage-head">
       <div class="zoombar" id="zoombar" style="display:none">
         <button id="zOut" title="Alejar">−</button>
         <span class="lvl" id="zLvl">100%</span>
@@ -403,6 +412,10 @@
         <button id="zStamp" title="Ver el sello al 100%">Sello</button>
         <button id="zCrop" title="Recortar la imagen">Recortar</button>
       </div>
+      <span class="stage-title" id="stageTitle">Vista previa</span>
+    </div>
+    <div class="stage" id="stage">
+      <div class="empty">Carga fotos para empezar.<br>El sello se dibuja con la fecha real del archivo.</div>
 
       <!-- ═══ Capa de recorte (estilo Photoshop) ═══ -->
       <div class="crop-ui" id="cropUI">
@@ -423,7 +436,6 @@
           <button class="btn-sm" id="cropCancel">Cancelar</button>
         </div>
       </div>
-      <div class="hint" id="hint" style="display:none">Rueda = zoom · Arrastrar = mover · Doble clic = ajustar</div>
     </div>
     <div class="status" id="status"></div>
     <div class="bar" id="bar"><i id="barFill"></i></div>
@@ -719,7 +731,11 @@ const listEl = $('list'), stage = $('stage'), statusEl = $('status');
    pero draw() hace stage.innerHTML='' — eso los desconecta del
    documento y getElementById devuelve null. Guardarlos aquí evita
    que draw() se rompa a mitad y deje la interfaz a medias. */
-const zoomBar = $('zoombar'), hintEl = $('hint');
+const zoomBar = $('zoombar');
+/* El texto de ayuda se quitó del área de trabajo. hintEl es un objeto
+   inerte para que las llamadas existentes no fallen, sin mostrar nada. */
+const hintEl = { style:{}, classList:{add(){},remove(){}} };
+const _noop = () => {};
 const cropUI = $('cropUI'), cropBox = $('cropBox'), cropSizeEl = $('cropSize');
 
 /* ═══════════════════════════════════════════════════════════
@@ -735,7 +751,7 @@ $('file').onchange = e => addFiles([...e.target.files]);
   $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.remove('over'); })
 );
 $('drop').addEventListener('drop', e => {
-  addFiles([...e.dataTransfer.files].filter(f => /jpe?g$/i.test(f.name)));
+  addFiles([...e.dataTransfer.files].filter(f => /\.(jpe?g|png|webp)$/i.test(f.name)));
 });
 
 async function addFiles(files){
@@ -832,7 +848,7 @@ function removePhoto(i){
   if (photos.length === 0) {
     stage.innerHTML = '<div class="empty">Sin fotos cargadas.</div>';
     stage.appendChild(zoomBar);
-    stage.appendChild(hintEl);
+    /* hint eliminado */
     stage.appendChild(cropUI);
     cropUI.classList.remove('on');
     cropMode = false;
@@ -1009,7 +1025,7 @@ $('btnClearAll').onclick = () => {
   photos.length = 0; current = -1; cv = null;
   renderList(); refreshHeader();
   stage.innerHTML = '<div class="empty">Sin fotos cargadas.</div>';
-  stage.appendChild(zoomBar); stage.appendChild(hintEl); stage.appendChild(cropUI);
+  stage.appendChild(zoomBar); /* hint eliminado */ stage.appendChild(cropUI);
   zoomBar.style.display = 'none'; hintEl.style.display = 'none';
   $('editor').style.display = 'none'; $('noSel').style.display = 'block';
 };
@@ -1244,7 +1260,7 @@ function draw(keepView){
   zoomBar.style.display = 'flex';
   hintEl.style.display = 'block';
   stage.appendChild(zoomBar);
-  stage.appendChild(hintEl);
+  /* hint eliminado */
   stage.appendChild(cropUI);      // sin esto, stage.innerHTML='' la destruiría
 
   /* keepView solo lo pide la edición de texto (para no reencuadrar a
@@ -1519,7 +1535,7 @@ $('btnExport').onclick = async () => {
     const custom = (p.rename || '').trim();
     const stem = custom
       ? custom.replace(/[\\/:*?"<>|]/g, '-').slice(0, 90)
-      : p.file.name.replace(/\.jpe?g$/i, '') + '-sellada';
+      : p.file.name.replace(/\.(jpe?g|png|webp)$/i, '') + '-sellada';
 
     let name = stem + '.jpg';
     let n = 2;
