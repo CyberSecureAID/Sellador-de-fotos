@@ -13,11 +13,15 @@
 <style>
   /* ── Cuarto oscuro: carbón cálido + ámbar de luz de seguridad ── */
   :root{
-    --bg:#14120F; --panel:#1C1915; --panel-2:#232019;
-    --line:#332E27; --line-soft:#282420;
-    --tx:#E9E3D7; --dim:#9C9387; --faint:#6B645B;
+    /* Paleta tomada de la foto: negro-verdoso + verde neón de datos,
+       con ámbar como acento secundario (los puntos amarillos del código). */
+    --bg:#0B0F0D; --panel:#111613; --panel-2:#171D19;
+    --line:#25302A; --line-soft:#1C231F;
+    --glass-edge:rgba(80,240,180,.22);
+    --tx:#E6EFE9; --dim:#8FA69B; --faint:#5E6F66;
+    --neon:#37E8A0; --neon-dim:rgba(55,232,160,.16);
     --amber:#E5A33D; --amber-dim:rgba(229,163,61,.16);
-    --ok:#6FBF73; --warn:#E5734B;
+    --ok:#37E8A0; --warn:#E5734B;
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
     --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
   }
@@ -35,15 +39,42 @@
 
   /* ── Estructura ── */
   header{
+    position:sticky;top:0;z-index:10;
     display:flex;align-items:center;gap:16px;
-    padding:14px 20px;border-bottom:1px solid var(--line);
-    background:var(--panel);position:sticky;top:0;z-index:10;
+    padding:14px 20px;
+    /* EFECTO CRISTAL sobre una foto de fondo.
+       La foto (header-bg.webp) va detrás, borrosa y oscurecida; el
+       backdrop-filter difumina lo que quede tras la barra y el
+       degradado semitransparente le da el tinte de "vidrio ahumado".
+       Si la foto no está en la carpeta, el degradado y el color base
+       hacen que el header se vea bien igual (no queda roto). */
+    background:
+      linear-gradient(180deg, rgba(11,16,13,.72), rgba(11,16,13,.86)),
+      var(--panel);
+    border-bottom:1px solid var(--glass-edge);
+    backdrop-filter:blur(3px);
+    overflow:hidden;
+  }
+  /* Capa de la foto: separada, para poder desenfocarla sin afectar
+     al texto de encima. */
+  header::before{
+    content:'';position:absolute;inset:0;z-index:-1;
+    background:url('header-bg.webp') center/cover no-repeat;
+    filter:blur(6px) saturate(1.2) brightness(.5);
+    transform:scale(1.15);   /* evita bordes claros al desenfocar */
+  }
+  /* Brillo verde sutil sobre el borde inferior, como reflejo del cristal */
+  header::after{
+    content:'';position:absolute;left:0;right:0;bottom:0;height:1px;z-index:-1;
+    background:linear-gradient(90deg,transparent,var(--neon),transparent);
+    opacity:.5;
   }
   .logo{
     width:26px;height:26px;border-radius:5px;flex-shrink:0;
-    background:var(--amber-dim);border:1px solid var(--amber);
-    display:grid;place-items:center;color:var(--amber);
+    background:var(--neon-dim);border:1px solid var(--neon);
+    display:grid;place-items:center;color:var(--neon);
     font-family:var(--mono);font-size:12px;
+    box-shadow:0 0 12px -2px var(--neon);
   }
   .spacer{flex:1}
   .count{font-family:var(--mono);font-size:12px;color:var(--dim)}
@@ -68,12 +99,12 @@
   }
   button:hover:not(:disabled){border-color:var(--faint);background:#2A2620}
   button:disabled{opacity:.4;cursor:not-allowed}
-  button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+  button:focus-visible{outline:2px solid var(--neon);outline-offset:2px}
   .btn-go{
-    background:var(--amber);color:#1A1408;border-color:var(--amber);
-    font-weight:600;
+    background:var(--neon);color:#04140D;border-color:var(--neon);
+    font-weight:600;box-shadow:0 0 16px -4px var(--neon);
   }
-  .btn-go:hover:not(:disabled){background:#F0B252;border-color:#F0B252}
+  .btn-go:hover:not(:disabled){background:#54F5B4;border-color:#54F5B4}
   .btn-sm{padding:5px 10px;font-size:12px}
 
   /* ── Zona de carga ── */
@@ -82,7 +113,7 @@
     padding:26px 16px;text-align:center;color:var(--dim);
     cursor:pointer;transition:.15s;
   }
-  .drop:hover,.drop.over{border-color:var(--amber);background:var(--amber-dim);color:var(--tx)}
+  .drop:hover,.drop.over{border-color:var(--neon);background:var(--neon-dim);color:var(--tx)}
   .drop b{display:block;color:var(--tx);margin-bottom:4px;font-weight:600}
   .drop small{font-size:11px;color:var(--faint)}
 
@@ -93,7 +124,7 @@
     border-radius:6px;cursor:pointer;border:1px solid transparent;
   }
   .item:hover{background:var(--panel)}
-  .item.sel{background:var(--panel-2);border-color:var(--amber)}
+  .item.sel{background:var(--panel-2);border-color:var(--neon)}
   .item img{
     width:44px;height:44px;object-fit:cover;border-radius:4px;
     background:var(--panel-2);flex-shrink:0;
@@ -129,13 +160,13 @@
     border:2px solid var(--line);padding:0;
   }
   .sw:hover{border-color:var(--faint)}
-  .sw.on{border-color:var(--amber);box-shadow:0 0 0 2px var(--amber-dim)}
+  .sw.on{border-color:var(--neon);box-shadow:0 0 0 2px var(--neon-dim)}
 
   .check{
     display:flex;align-items:center;gap:8px;cursor:pointer;
     font-size:12px;color:var(--dim);
   }
-  .check input{accent-color:var(--amber);width:14px;height:14px;cursor:pointer}
+  .check input{accent-color:var(--neon);width:14px;height:14px;cursor:pointer}
   .dot.ok{background:var(--ok)}
   .dot.bad{background:var(--warn)}
 
@@ -253,10 +284,10 @@
     line-height:1.6;resize:vertical;
   }
   input:focus,textarea:focus,select:focus{
-    outline:none;border-color:var(--amber);
+    outline:none;border-color:var(--neon);
   }
   textarea{min-height:96px}
-  input[type=range]{width:100%;accent-color:var(--amber)}
+  input[type=range]{width:100%;accent-color:var(--neon)}
   .row{display:flex;gap:8px;align-items:center}
   .row .val{font-family:var(--mono);font-size:11px;color:var(--dim);min-width:42px;text-align:right}
 
@@ -289,7 +320,7 @@
   .meta-body{padding:0 11px 11px;max-height:280px;overflow-y:auto}
   .meta-sec{
     font-family:var(--mono);font-size:9px;letter-spacing:.14em;
-    text-transform:uppercase;color:var(--amber);
+    text-transform:uppercase;color:var(--neon);
     margin:10px 0 5px;padding-top:8px;border-top:1px solid var(--line-soft);
   }
   .meta-sec:first-child{border-top:none;padding-top:0;margin-top:2px}
@@ -313,7 +344,7 @@
     overflow:hidden;margin-top:10px;display:none;
   }
   .bar.on{display:block}
-  .bar i{display:block;height:100%;background:var(--amber);width:0;transition:width .2s}
+  .bar i{display:block;height:100%;background:var(--neon);width:0;transition:width .2s}
   .status{
     font-family:var(--mono);font-size:11px;color:var(--dim);
     margin-top:8px;min-height:16px;
