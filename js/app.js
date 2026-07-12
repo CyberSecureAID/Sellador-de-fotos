@@ -843,10 +843,11 @@ function enterVector(){
       box.innerHTML = svg;
       const el = box.querySelector('svg');
       if (el) {
+        /* El viewBox ya viene inyectado en vectorize(). Al quitar
+           width/height y dejar que el CSS mande, el SVG se ESCALA
+           dentro del marco en vez de recortarse. */
         el.removeAttribute('width');
-        el.removeAttribute('height');
-        el.style.maxWidth = '100%';
-        el.style.maxHeight = '100%';
+        el.removeAttribute('height');   // el CSS (.vec-view svg) lo escala entero
       }
       stage.appendChild(box);
       stage.appendChild(cropUI);
@@ -1001,7 +1002,7 @@ const FORMATS = {
    con fotos produce archivos enormes y de aspecto sucio — por eso
    la interfaz avisa y ofrece controles de color y simplificación.
 ═══════════════════════════════════════════════════════════ */
-function tracerOptions(){
+function tracerOptions(traceScale){
   const preset = $('svgPreset').value;
   const base = (typeof ImageTracer !== 'undefined' && ImageTracer.optionpresets &&
                 ImageTracer.optionpresets[preset])
@@ -1009,26 +1010,61 @@ function tracerOptions(){
              : {};
   return {
     ...base,
-    numberofcolors: +$('svgColors').value,   // paleta: menos = más limpio
-    ltres: +$('svgSmooth').value / 10,       // tolerancia de línea recta
-    qtres: +$('svgSmooth').value / 10,       // tolerancia de curva
-    pathomit: 8,                             // descarta manchas diminutas
-    strokewidth: 0,
+    numberofcolors:  +$('svgColors').value,          // paleta
+    colorquantcycles: 5,                             // más ciclos = mejor paleta
+    ltres: +$('svgSmooth').value / 10,               // tolerancia de recta
+    qtres: +$('svgSmooth').value / 10,               // tolerancia de curva
+    pathomit: +$('svgOmit').value,                   // descarta motas pequeñas
+    blurradius: +$('svgBlur').value,                 // suaviza el ruido ANTES de trazar
+    blurdelta: 20,
+    rightangleenhance: true,                         // esquinas más limpias
     linefilter: true,
-    scale: 1
+    strokewidth: 0,
+    // Se traza a resolución reducida (menos ruido) y se reescala el
+    // resultado: el SVG sale al tamaño original, pero mucho más limpio.
+    scale: 1 / traceScale
   };
 }
 
-/* Devuelve el SVG (texto) de una foto ya sellada y recortada. */
+/* Devuelve el SVG (texto) de una foto ya sellada y recortada.
+
+   DOS CORRECCIONES IMPORTANTES:
+   1) ImageTracer emite el SVG con width/height pero SIN viewBox. Sin
+      viewBox, el SVG no escala: se RECORTA. Aquí se le inyecta.
+   2) Trazar a resolución completa sobre una foto genera muchísimo ruido.
+      Se traza sobre una versión reducida (más limpia y más rápida) y se
+      reescala la salida, así el SVG conserva el tamaño original.
+*/
 function vectorize(p){
   if (typeof ImageTracer === 'undefined') {
     throw new Error('La librería de vectorización no se cargó. Revisa tu conexión.');
   }
-  const c = document.createElement('canvas');
-  renderTo(c, p);                        // incluye sello y recorte
-  const g = c.getContext('2d');
-  const imgd = g.getImageData(0, 0, c.width, c.height);
-  return ImageTracer.imagedataToSVG(imgd, tracerOptions());
+
+  const full = document.createElement('canvas');
+  renderTo(full, p);                         // incluye sello y recorte
+
+  const ts = +$('svgRes').value / 100;       // 0.25 … 1.00
+  const w = Math.max(1, Math.round(full.width  * ts));
+  const h = Math.max(1, Math.round(full.height * ts));
+
+  const small = document.createElement('canvas');
+  small.width = w; small.height = h;
+  const sg = small.getContext('2d');
+  sg.imageSmoothingEnabled = true;
+  sg.imageSmoothingQuality = 'high';
+  sg.drawImage(full, 0, 0, w, h);
+
+  const imgd = sg.getImageData(0, 0, w, h);
+  let svg = ImageTracer.imagedataToSVG(imgd, tracerOptions(ts));
+
+  // Inyectar viewBox si falta (evita el recorte y permite escalar)
+  const mw = /width="([\d.]+)"/.exec(svg);
+  const mh = /height="([\d.]+)"/.exec(svg);
+  if (mw && mh && !/viewBox=/.test(svg)) {
+    svg = svg.replace('<svg ',
+      `<svg viewBox="0 0 ${mw[1]} ${mh[1]}" preserveAspectRatio="xMidYMid meet" `);
+  }
+  return svg;
 }
 
 /* Comprueba si el navegador sabe CODIFICAR un formato (no todos los
@@ -1228,6 +1264,9 @@ $('fmt').onchange = () => {
 /* Los deslizadores del panel SVG */
 $('svgColors').oninput = () => { $('svgColorsVal').textContent = $('svgColors').value; };
 $('svgSmooth').oninput = () => { $('svgSmoothVal').textContent = (+$('svgSmooth').value / 10).toFixed(1); };
+$('svgBlur').oninput   = () => { $('svgBlurVal').textContent   = $('svgBlur').value; };
+$('svgOmit').oninput   = () => { $('svgOmitVal').textContent   = $('svgOmit').value; };
+$('svgRes').oninput    = () => { $('svgResVal').textContent    = $('svgRes').value + '%'; };
 
 /* Vista previa del vectorizado: sustituye el lienzo por el SVG real,
    para que veas exactamente lo que vas a exportar antes de hacerlo. */
@@ -1258,7 +1297,7 @@ $('btnSvgPreview').onclick = () => {
       box.style.cssText = 'width:100%;height:100%;display:grid;place-items:center;overflow:auto;padding:12px';
       box.innerHTML = svg;
       const el = box.querySelector('svg');
-      if (el) { el.style.maxWidth = '100%'; el.style.maxHeight = '100%'; el.removeAttribute('width'); el.removeAttribute('height'); }
+      if (el) { el.removeAttribute('width'); el.removeAttribute('height'); el.style.width='100%'; el.style.height='100%'; }
       stage.appendChild(box);
       stage.appendChild(cropUI);
 
