@@ -453,8 +453,11 @@ select.fmt-select{
 
 /* Imagen que representa la sección de edición (sustituye al aviso naranja) */
 .section-photo{
-  height:120px;border-radius:12px;margin-bottom:16px;
-  background:url('panel-bg.webp') center/cover no-repeat, var(--panel-2);
+  /* La imagen es horizontal: se muestra ENTERA (contain), con su propia
+     proporción, sin recortes. La altura se ajusta al ancho de la columna. */
+  aspect-ratio:1313/736;
+  width:100%;
+  border-radius:12px;margin-bottom:16px;
+  background:url('panel-bg.webp') center/contain no-repeat, #0A0F0C;
   border:1px solid var(--line);
-  box-shadow:inset 0 -40px 50px -30px rgba(0,0,0,.8);
 }
